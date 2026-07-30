@@ -1,0 +1,17 @@
+appId: io.github.wjt0321.kimi-code-desktop
+productName: Kimi Code Desktop
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+win:
+  icon: build/kimi-code.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+artifactName: ${productName}-${version}-setup.${ext}

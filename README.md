@@ -1,0 +1,117 @@
+# Kimi Code Desktop
+
+一个面向 Windows 的**非官方 Kimi Code 桌面客户端**。它直接识别并调用系统中已经安装、已经登录的 Kimi Code CLI，把本地 Agent 的工作区、任务、执行过程、工具调用、审批和提问收拢到一个现代化中文桌面工作台中。
+
+> [!IMPORTANT]
+> 本项目不是 Moonshot AI 的官方桌面发行版，也不会修改或重新发布上游 CLI。Kimi Code、相关名称与品牌资源归其权利人所有。本项目以独立仓库维护，并在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中保留上游 MIT 许可与归属说明。
+
+![Kimi Code Desktop 工作台](docs/images/workbench.png)
+
+## 产品定位
+
+Kimi Code Desktop 是系统级 CLI 的桌面外壳，而不是某个代码仓库中的插件：
+
+- 自动发现 Windows 环境中的 `kimi` 命令，也支持手动选择 `kimi.cmd` 或可执行文件。
+- 复用 CLI 已有的登录态、模型配置、本地服务和任务数据。
+- 桌面端启动的 CLI 服务会在应用退出时一并关闭；连接到外部既有服务时不会擅自结束它。
+- CLI 仍然是能力来源，桌面端只负责更清晰的交互、状态呈现和本机工作流。
+
+## 当前能力
+
+- **工作区管理**：选择本机文件夹、切换工作区，并只展示当前工作区的任务。
+- **任务管理**：创建、搜索、切换、重命名和归档任务。
+- **执行时间线**：展示用户输入、助手回复、思考过程、工具调用、工具结果和运行状态。
+- **任务交互**：处理审批、问题、待办和子任务活动。
+- **模型选择**：从本地 Kimi Code 服务读取可用模型，并为任务选择模型。
+- **运行控制**：启动、连接、停止本机服务，以及停止正在运行的任务。
+- **中文界面**：工作台、设置、错误提示和主要交互均使用中文。
+- **快捷操作**：`Enter` 发送，`Ctrl + Enter` 换行，`Ctrl + N` 新建任务，`Ctrl + B` 切换侧边栏，`Ctrl + K` 打开命令面板。
+
+## 界面原则
+
+界面采用 Codex 风格的信息架构：窄导航栏、工作区/任务侧边栏、任务画布、固定输入区和按需展开的上下文面板。视觉实现使用 React、Radix UI、Lucide 图标与项目自有样式，重点保证：
+
+- 任务状态始终可见；
+- 输入与发送按钮在常见窗口尺寸下始终可用；
+- 高风险审批和普通任务信息有明确层级；
+- 不把终端日志原样堆给用户，而是尽量转换成结构化时间线。
+
+## 使用要求
+
+- Windows 10 或 Windows 11（x64）。
+- 已安装并登录 Kimi Code CLI。在 PowerShell 中运行以下命令应能显示版本：
+
+  ```powershell
+  kimi --version
+  ```
+
+桌面端不会把认证 token 暴露给渲染进程，也不会在界面状态中保存 token。主进程只连接本机 loopback 服务，并通过受限 IPC 向界面提供经过校验的数据。
+
+## 本地开发
+
+开发环境要求：
+
+- Node.js `>= 24.11.1`
+- pnpm `10.33.0`
+
+```powershell
+git clone https://github.com/wjt0321/kimi-code-desktop.git
+cd kimi-code-desktop
+pnpm install
+pnpm dev
+```
+
+如访问依赖源受限，可在当前 PowerShell 会话中配置自己的 HTTP/HTTPS 代理后再执行安装命令。
+
+## 验证
+
+```powershell
+pnpm typecheck
+pnpm test
+pnpm exec electron-vite build
+```
+
+## Windows 打包
+
+生成免安装目录版本：
+
+```powershell
+pnpm build:dir
+```
+
+可执行文件位于：
+
+```text
+release/win-unpacked/Kimi Code Desktop.exe
+```
+
+生成 NSIS 安装程序：
+
+```powershell
+pnpm build
+```
+
+安装程序输出到 `release/`。
+
+## 常见问题
+
+### 桌面端找不到 CLI
+
+先确认 PowerShell 中的 `kimi --version` 可用。如果 CLI 安装在非标准位置，可在桌面端的 CLI 就绪页面手动选择 `kimi.cmd` 或对应可执行文件。
+
+### 选择文件夹后没有任务
+
+工作区和任务是两个独立概念。打开工作区后，点击“新建任务”创建该工作区下的任务；切换到没有任务的工作区时，主画布会回到新建任务状态。
+
+### 为什么有些 CLI 功能还没有图形入口
+
+桌面端优先接入上游稳定的本地服务接口。CLI 与 Web 能力演进后，会继续补齐会话恢复、更多配置、文件变更、计划、用量与更丰富的工具结果展示。未接入的功能仍可直接在原 CLI 中使用。
+
+## 上游与许可
+
+- 上游项目：[MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code)
+- 本项目：[wjt0321/kimi-code-desktop](https://github.com/wjt0321/kimi-code-desktop)
+- 本项目许可：[MIT License](LICENSE)
+- 上游资源与许可：[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+
+感谢 Moonshot AI 与 Kimi Code 社区。本项目的目标是以开源方式为喜欢 Kimi Code CLI 的 Windows 用户提供更方便的桌面体验。
