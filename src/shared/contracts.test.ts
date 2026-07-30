@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DesktopApprovalSchema,
+  DesktopCapabilitySnapshotSchema,
   DesktopDiffLineSchema,
   DesktopModelSchema,
   DesktopTimelineEntrySchema,
   DesktopSessionRuntimeSchema,
   DesktopTaskEventSchema,
+  DesktopTaskSchema,
   DesktopTaskSnapshotSchema,
   CopyTextRequestSchema,
   RenameSessionRequestSchema,
@@ -152,5 +154,69 @@ describe('review action contracts', () => {
   it('rejects relative paths and oversized clipboard values', () => {
     expect(() => RevealPathRequestSchema.parse({ path: 'src/app.ts' })).toThrow('必须提供绝对路径');
     expect(() => CopyTextRequestSchema.parse({ text: 'x'.repeat(200_001) })).toThrow();
+  });
+});
+
+
+describe('desktop capability contracts', () => {
+  it('accepts a ready capability snapshot for CLI compatibility mode', () => {
+    expect(DesktopCapabilitySnapshotSchema.parse({
+      phase: 'ready',
+      desktopVersion: '0.5.0',
+      cliVersion: '0.30.0',
+      serverVersion: '0.30.0',
+      checkedAt: '2026-07-30T08:00:00.000Z',
+      compatibilityMode: true,
+      capabilities: {
+        sessionRuntime: 'supported',
+        sessionWarnings: 'supported',
+        transcript: 'supported',
+        config: 'supported',
+        secondaryModel: 'unsupported',
+        managedUserInfo: 'unsupported',
+        promptProfile: 'unsupported',
+        nonBlockingTaskOutput: 'unsupported',
+      },
+    })).toMatchObject({ phase: 'ready', compatibilityMode: true });
+  });
+
+  it('rejects invalid capability states', () => {
+    expect(() => DesktopCapabilitySnapshotSchema.parse({
+      phase: 'ready',
+      desktopVersion: '0.5.0',
+      compatibilityMode: false,
+      capabilities: {
+        sessionRuntime: 'yes',
+        sessionWarnings: 'unknown',
+        transcript: 'unknown',
+        config: 'unknown',
+        secondaryModel: 'unknown',
+        managedUserInfo: 'unknown',
+        promptProfile: 'unknown',
+        nonBlockingTaskOutput: 'unknown',
+      },
+    })).toThrow();
+  });
+
+  it('accepts optional live task detail without requiring it from CLI 0.30', () => {
+    expect(DesktopTaskSchema.parse({
+      id: 'task-1',
+      title: '检查项目',
+      kind: 'subagent',
+      state: 'running',
+      outputTail: '已读取文件',
+      detached: true,
+      agentId: 'agent-2',
+      activityHint: 'waiting_notification',
+      updatedAt: '2026-07-30T08:00:00.000Z',
+    })).toMatchObject({ detached: true, activityHint: 'waiting_notification' });
+
+    expect(DesktopTaskSchema.parse({
+      id: 'task-legacy',
+      title: '旧任务',
+      kind: 'other',
+      state: 'running',
+      outputTail: '',
+    }).activityHint).toBeUndefined();
   });
 });

@@ -25,6 +25,33 @@ export const DesktopStatusSchema = z.object({
 
 export type DesktopStatus = z.infer<typeof DesktopStatusSchema>;
 
+export const DesktopCapabilityStateSchema = z.enum(['supported', 'unsupported', 'unknown']);
+export type DesktopCapabilityState = z.infer<typeof DesktopCapabilityStateSchema>;
+
+export const DesktopCapabilitiesSchema = z.object({
+  sessionRuntime: DesktopCapabilityStateSchema,
+  sessionWarnings: DesktopCapabilityStateSchema,
+  transcript: DesktopCapabilityStateSchema,
+  config: DesktopCapabilityStateSchema,
+  secondaryModel: DesktopCapabilityStateSchema,
+  managedUserInfo: DesktopCapabilityStateSchema,
+  promptProfile: DesktopCapabilityStateSchema,
+  nonBlockingTaskOutput: DesktopCapabilityStateSchema,
+});
+export type DesktopCapabilities = z.infer<typeof DesktopCapabilitiesSchema>;
+
+export const DesktopCapabilitySnapshotSchema = z.object({
+  phase: z.enum(['idle', 'detecting', 'ready']),
+  desktopVersion: z.string().min(1),
+  cliVersion: z.string().min(1).optional(),
+  serverVersion: z.string().min(1).optional(),
+  checkedAt: z.string().optional(),
+  compatibilityMode: z.boolean(),
+  capabilities: DesktopCapabilitiesSchema,
+});
+export type DesktopCapabilitySnapshot = z.infer<typeof DesktopCapabilitySnapshotSchema>;
+export type DesktopCapabilityKey = keyof DesktopCapabilitySnapshot['capabilities'];
+
 export const SessionIdSchema = z.string().min(1).max(200);
 
 export const DesktopPermissionModeSchema = z.enum(['manual', 'yolo', 'auto']);
@@ -271,9 +298,15 @@ export const DesktopTaskSchema = z.object({
   kind: z.enum(['shell', 'subagent', 'tool', 'other']),
   state: z.enum(['running', 'completed', 'failed', 'timed_out', 'killed', 'lost']),
   outputTail: z.string(),
+  detached: z.boolean().optional(),
+  agentId: z.string().min(1).optional(),
+  resultSummary: z.string().optional(),
   error: z.string().optional(),
+  stateReason: z.string().optional(),
+  activityHint: z.enum(['snapshot', 'waiting_notification']).optional(),
   startedAt: z.string().optional(),
   endedAt: z.string().optional(),
+  updatedAt: z.string().optional(),
 });
 
 export type DesktopTask = z.infer<typeof DesktopTaskSchema>;
