@@ -47,7 +47,7 @@ export function WorkspaceGroup({ workspace, sessions, selectedSessionId, collaps
           <em>{workspace.sessionCount}</em>
         </button>
         <button type="button" className="workspace-group__quick" aria-label={`在“${workspace.name}”中新建任务`} onClick={onNewTask}><Plus size={14} /></button>
-        <DropdownMenu.Root>
+        <DropdownMenu.Root modal={false}>
           <DropdownMenu.Trigger asChild><button type="button" className="workspace-group__quick" aria-label={`“${workspace.name}”工作区菜单`}><MoreHorizontal size={15} /></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal>
             <DropdownMenu.Content className="workspace-menu" sideOffset={5} align="end">

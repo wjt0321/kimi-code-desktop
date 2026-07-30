@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesktopSession, DesktopWorkspace } from '../../../shared/contracts';
@@ -15,6 +15,20 @@ const sessions: DesktopSession[] = [
 ];
 
 describe('WorkspaceSidebar', () => {
+  it('restores page pointer events after removing a workspace from its menu', async () => {
+    const user = userEvent.setup();
+    const onRemoveWorkspace = vi.fn().mockResolvedValue(true);
+    render(<WorkspaceSidebar connected workspaces={workspaces} sessions={sessions} selectedSessionId="sb" workspacePages={{}} onSelectTask={vi.fn()} onNewTask={vi.fn()} onAddExisting={vi.fn()} onCreateWorkspace={vi.fn()} onRenameWorkspace={vi.fn()} onRemoveWorkspace={onRemoveWorkspace} onRevealWorkspace={vi.fn()} onRenameTask={vi.fn()} onArchiveTask={vi.fn()} onOpenArchived={vi.fn()} onLoadMore={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: '“项目 A”工作区菜单' }));
+    await user.click(screen.getByRole('menuitem', { name: '从列表清除' }));
+    fireEvent.click(screen.getByRole('button', { name: '从列表清除' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '清除工作区' })).toBeNull());
+    expect(onRemoveWorkspace).toHaveBeenCalledWith('a');
+    expect(document.body.style.pointerEvents).not.toBe('none');
+  });
+
   it('renders Codex-style workspace groups and keeps tasks nested beneath them', async () => {
     const user = userEvent.setup();
     const onNewTask = vi.fn();
