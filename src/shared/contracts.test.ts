@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DesktopApprovalSchema,
   DesktopCapabilitySnapshotSchema,
+  DesktopCliUpdateSnapshotSchema,
+  DesktopThemeSnapshotSchema,
+  SetThemeRequestSchema,
   DesktopDiffLineSchema,
   DesktopModelSchema,
   DesktopTimelineEntrySchema,
@@ -218,5 +221,40 @@ describe('desktop capability contracts', () => {
       state: 'running',
       outputTail: '',
     }).activityHint).toBeUndefined();
+  });
+});
+
+
+describe('desktop theme and CLI update contracts', () => {
+  it('accepts system light and dark theme snapshots', () => {
+    expect(DesktopThemeSnapshotSchema.parse({ preference: 'system', resolved: 'light' })).toEqual({ preference: 'system', resolved: 'light' });
+    expect(SetThemeRequestSchema.parse({ preference: 'dark' })).toEqual({ preference: 'dark' });
+    expect(() => SetThemeRequestSchema.parse({ preference: 'auto' })).toThrow();
+  });
+
+  it('accepts update availability and bounded install states', () => {
+    expect(DesktopCliUpdateSnapshotSchema.parse({
+      phase: 'available',
+      currentVersion: '0.30.0',
+      latestVersion: '0.31.0',
+      installSource: 'npm-global',
+      installCommand: 'npm install -g @moonshot-ai/kimi-code@0.31.0',
+      canAutoInstall: true,
+      updateAvailable: true,
+      checkedAt: '2026-07-30T12:00:00.000Z',
+    })).toMatchObject({ phase: 'available', updateAvailable: true });
+
+    expect(DesktopCliUpdateSnapshotSchema.parse({
+      phase: 'failed',
+      currentVersion: '0.30.0',
+      canAutoInstall: false,
+      updateAvailable: false,
+      error: '检查更新失败',
+    }).phase).toBe('failed');
+  });
+
+  it('rejects unknown install sources and update phases', () => {
+    expect(() => DesktopCliUpdateSnapshotSchema.parse({ phase: 'downloading', canAutoInstall: false, updateAvailable: false })).toThrow();
+    expect(() => DesktopCliUpdateSnapshotSchema.parse({ phase: 'available', installSource: 'winget', canAutoInstall: true, updateAvailable: true })).toThrow();
   });
 });

@@ -25,6 +25,60 @@ export const DesktopStatusSchema = z.object({
 
 export type DesktopStatus = z.infer<typeof DesktopStatusSchema>;
 
+export const ThemePreferenceSchema = z.enum(['system', 'light', 'dark']);
+export type ThemePreference = z.infer<typeof ThemePreferenceSchema>;
+
+export const ResolvedThemeSchema = z.enum(['light', 'dark']);
+export type ResolvedTheme = z.infer<typeof ResolvedThemeSchema>;
+
+export const DesktopThemeSnapshotSchema = z.object({
+  preference: ThemePreferenceSchema,
+  resolved: ResolvedThemeSchema,
+});
+export type DesktopThemeSnapshot = z.infer<typeof DesktopThemeSnapshotSchema>;
+
+export const SetThemeRequestSchema = z.object({ preference: ThemePreferenceSchema });
+export type SetThemeRequest = z.infer<typeof SetThemeRequestSchema>;
+
+export const CliInstallSourceSchema = z.enum([
+  'npm-global',
+  'pnpm-global',
+  'yarn-global',
+  'bun-global',
+  'native',
+  'unsupported',
+]);
+export type CliInstallSource = z.infer<typeof CliInstallSourceSchema>;
+
+export const CliUpdatePhaseSchema = z.enum([
+  'idle',
+  'checking',
+  'current',
+  'available',
+  'awaiting-confirmation',
+  'stopping-service',
+  'installing',
+  'verifying',
+  'restarting-service',
+  'succeeded',
+  'failed',
+]);
+export type CliUpdatePhase = z.infer<typeof CliUpdatePhaseSchema>;
+
+export const DesktopCliUpdateSnapshotSchema = z.object({
+  phase: CliUpdatePhaseSchema,
+  currentVersion: z.string().min(1).optional(),
+  latestVersion: z.string().min(1).optional(),
+  checkedAt: z.string().optional(),
+  installSource: CliInstallSourceSchema.optional(),
+  installCommand: z.string().min(1).optional(),
+  canAutoInstall: z.boolean(),
+  updateAvailable: z.boolean(),
+  error: z.string().min(1).optional(),
+  detail: z.string().optional(),
+});
+export type DesktopCliUpdateSnapshot = z.infer<typeof DesktopCliUpdateSnapshotSchema>;
+
 export const DesktopCapabilityStateSchema = z.enum(['supported', 'unsupported', 'unknown']);
 export type DesktopCapabilityState = z.infer<typeof DesktopCapabilityStateSchema>;
 
