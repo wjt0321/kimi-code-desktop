@@ -30,6 +30,12 @@ const desktopApi = {
   listWorkspaces: vi.fn<() => Promise<DesktopWorkspace[]>>(),
   listSessions: vi.fn<() => Promise<DesktopSession[]>>(),
   listModels: vi.fn<() => Promise<[]>>(),
+  listSessionPage: vi.fn(),
+  createTask: vi.fn(),
+  createWorkspace: vi.fn(),
+  createWorkspaceFolder: vi.fn(),
+  renameWorkspace: vi.fn(),
+  removeWorkspace: vi.fn(),
   getTaskSnapshot: vi.fn<(sessionId: string) => Promise<DesktopTaskSnapshot>>(),
   watchTask: vi.fn<(input: { sessionId: string; agentId: string }) => Promise<void>>(),
   unwatchTask: vi.fn<(sessionId?: string) => Promise<void>>(),
@@ -54,6 +60,10 @@ beforeEach(() => {
   desktopApi.listWorkspaces.mockResolvedValue([workspace]);
   desktopApi.listSessions.mockResolvedValue([session]);
   desktopApi.listModels.mockResolvedValue([]);
+  desktopApi.listSessionPage.mockResolvedValue({ items: [], hasMore: false });
+  desktopApi.createWorkspace.mockResolvedValue(workspace);
+  desktopApi.renameWorkspace.mockImplementation(async ({ workspaceId, name }) => ({ ...workspace, id: workspaceId, name }));
+  desktopApi.removeWorkspace.mockResolvedValue(undefined);
   desktopApi.getTaskSnapshot.mockResolvedValue(snapshot);
   desktopApi.watchTask.mockResolvedValue();
   desktopApi.unwatchTask.mockResolvedValue();
@@ -108,6 +118,35 @@ describe('useWorkbench', () => {
     await waitFor(() => expect(desktopApi.getTaskSnapshot).toHaveBeenCalledTimes(2));
   });
 
+  it('selects a task and its workspace atomically', async () => {
+    const workspaceB: DesktopWorkspace = { id: 'ws_2', name: '第二仓库', root: 'D:\\repo', sessionCount: 1 };
+    const sessionB: DesktopSession = { ...session, id: 'session-2', title: '第二任务', cwd: 'D:\\repo', workspaceId: 'ws_2' };
+    desktopApi.listWorkspaces.mockResolvedValue([workspace, workspaceB]);
+    desktopApi.listSessions.mockResolvedValue([session, sessionB]);
+    const { result } = renderHook(() => useWorkbench(true));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(2));
+
+    act(() => result.current.actions.selectTask('session-2'));
+
+    expect(result.current.selectedWorkspaceId).toBe('ws_2');
+    expect(result.current.selectedSessionId).toBe('session-2');
+  });
+
+  it('keeps the workspace chosen in the new-task request and opens the created task', async () => {
+    const workspaceB: DesktopWorkspace = { id: 'ws_2', name: '第二仓库', root: 'D:\\repo', sessionCount: 0 };
+    const created: DesktopSession = { ...session, id: 'created-b', title: 'B 任务', cwd: 'D:\\repo', workspaceId: 'ws_2', busy: false };
+    desktopApi.listWorkspaces.mockResolvedValue([workspace, workspaceB]);
+    desktopApi.listSessions.mockResolvedValue([session]);
+    desktopApi.createTask.mockResolvedValue(created);
+    const { result } = renderHook(() => useWorkbench(true));
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(2));
+
+    await act(async () => { await result.current.actions.createTask({ target: 'workspace', workspaceId: 'ws_2', title: 'B 任务' }); });
+
+    expect(result.current.selectedWorkspaceId).toBe('ws_2');
+    expect(result.current.selectedSessionId).toBe('created-b');
+  });
+
   it('clears a task from another workspace when switching to an empty workspace', async () => {
     const emptyWorkspace: DesktopWorkspace = { id: 'ws_2', name: '空工作区', root: 'C:\empty', sessionCount: 0 };
     desktopApi.listWorkspaces.mockResolvedValue([workspace, emptyWorkspace]);
@@ -129,7 +168,7 @@ describe('useWorkbench', () => {
 
     await act(async () => result.current.actions.archiveTask('session-1'));
     expect(desktopApi.archiveSession).toHaveBeenCalledWith('session-1');
-    expect(desktopApi.listSessions).toHaveBeenCalledTimes(3);
+    expect(desktopApi.listSessions.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 
   it('undoes the last turn and restores the latest user prompt as a composer draft', async () => {

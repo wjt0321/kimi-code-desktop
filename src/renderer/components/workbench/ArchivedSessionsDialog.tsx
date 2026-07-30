@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { ArchiveRestore, Clock3, LoaderCircle, Search, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { DesktopSession } from '../../../shared/contracts';
 import { formatSessionTime } from './session-presentation';
@@ -17,15 +17,19 @@ interface ArchivedSessionsDialogProps {
 export function ArchivedSessionsDialog({ open, sessions, loading, onOpenChange, onLoad, onRestore }: ArchivedSessionsDialogProps) {
   const [query, setQuery] = useState('');
   const [restoringId, setRestoringId] = useState<string>();
+  const onLoadRef = useRef(onLoad);
+  const wasOpen = useRef(false);
+  onLoadRef.current = onLoad;
   const filtered = sessions.filter((session) => `${session.title} ${session.lastPrompt ?? ''} ${session.cwd}`.toLocaleLowerCase('zh-CN').includes(query.trim().toLocaleLowerCase('zh-CN')));
 
   useEffect(() => {
-    if (open) onLoad();
-    else {
+    if (open && !wasOpen.current) onLoadRef.current();
+    if (!open && wasOpen.current) {
       setQuery('');
       setRestoringId(undefined);
     }
-  }, [open, onLoad]);
+    wasOpen.current = open;
+  }, [open]);
 
   const restore = async (sessionId: string) => {
     setRestoringId(sessionId);

@@ -10,6 +10,7 @@ import type {
   QuestionDismissRequest,
   QuestionResponseRequest,
 } from '../../shared/contracts';
+import { mergeSessions, resolveNavigation, sessionsForWorkspace, workspaceIdForSession } from './workbench-navigation';
 import { useSessionRuntime } from './useSessionRuntime';
 
 export function useWorkbench(connected: boolean) {
@@ -26,9 +27,18 @@ export function useWorkbench(connected: boolean) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [pendingApprovalIds, setPendingApprovalIds] = useState<string[]>([]);
+  const [workspacePages, setWorkspacePages] = useState<Record<string, { loading: boolean; hasMore: boolean; error?: string }>>({});
   const selectedSessionIdRef = useRef(selectedSessionId);
+  const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
+  const workspacesRef = useRef(workspaces);
+  const sessionsRef = useRef(sessions);
   const snapshotRevision = useRef(0);
+  const overviewRevision = useRef(0);
+  const overviewTimer = useRef<number | undefined>(undefined);
   selectedSessionIdRef.current = selectedSessionId;
+  selectedWorkspaceIdRef.current = selectedWorkspaceId;
+  workspacesRef.current = workspaces;
+  sessionsRef.current = sessions;
   const {
     runtime,
     loading: runtimeLoading,
@@ -41,24 +51,34 @@ export function useWorkbench(connected: boolean) {
 
   const refreshOverview = useCallback(async () => {
     if (!connected) return;
+    const revision = ++overviewRevision.current;
     try {
       const [nextWorkspaces, nextSessions, nextModels] = await Promise.all([
         window.desktop.listWorkspaces(),
         window.desktop.listSessions(),
         window.desktop.listModels().catch(() => []),
       ]);
+      if (revision !== overviewRevision.current) return;
+      const mergedSessions = mergeSessions(nextSessions, sessionsRef.current.filter((session) =>
+        nextWorkspaces.some((workspace) => workspace.id === workspaceIdForSession(session, nextWorkspaces))));
+      const navigation = resolveNavigation(
+        nextWorkspaces,
+        mergedSessions,
+        selectedWorkspaceIdRef.current,
+        selectedSessionIdRef.current,
+      );
+      workspacesRef.current = nextWorkspaces;
+      sessionsRef.current = mergedSessions;
+      selectedWorkspaceIdRef.current = navigation.workspaceId;
+      selectedSessionIdRef.current = navigation.sessionId;
       setWorkspaces(nextWorkspaces);
-      setSessions(nextSessions);
+      setSessions(mergedSessions);
       setModels(nextModels);
-      setSelectedWorkspaceId((current) => current && nextWorkspaces.some((workspace) => workspace.id === current)
-        ? current
-        : nextWorkspaces[0]?.id);
-      setSelectedSessionId((current) => current && nextSessions.some((session) => session.id === current)
-        ? current
-        : nextSessions[0]?.id);
+      setSelectedWorkspaceId(navigation.workspaceId);
+      setSelectedSessionId(navigation.sessionId);
       setError(undefined);
     } catch {
-      setError('无法加载本地服务中的工作区和任务。');
+      if (revision === overviewRevision.current) setError('无法加载本地服务中的工作区和任务。');
     }
   }, [connected]);
 
@@ -77,35 +97,31 @@ export function useWorkbench(connected: boolean) {
     }
   }, []);
 
-  const selectTask = useCallback((sessionId: string) => {
-    if (sessionId === selectedSessionIdRef.current) return;
+  const applySelection = useCallback((workspaceId: string | undefined, sessionId: string | undefined) => {
     const previous = selectedSessionIdRef.current;
+    selectedWorkspaceIdRef.current = workspaceId;
     selectedSessionIdRef.current = sessionId;
+    setSelectedWorkspaceId(workspaceId);
     setSelectedSessionId(sessionId);
-    setSnapshot(undefined);
-    setSelectedModelId(undefined);
-    if (previous) void window.desktop.unwatchTask(previous);
+    if (previous !== sessionId) {
+      snapshotRevision.current += 1;
+      setSnapshot(undefined);
+      setSelectedModelId(undefined);
+      if (previous) void window.desktop.unwatchTask(previous);
+    }
   }, []);
 
+  const selectTask = useCallback((sessionId: string) => {
+    const session = sessionsRef.current.find((item) => item.id === sessionId);
+    if (!session) return;
+    applySelection(workspaceIdForSession(session, workspacesRef.current) ?? selectedWorkspaceIdRef.current, sessionId);
+  }, [applySelection]);
+
   const selectWorkspace = useCallback((workspaceId: string) => {
-    setSelectedWorkspaceId(workspaceId);
-    const workspace = workspaces.find((item) => item.id === workspaceId);
-    const nextSession = sessions.find((session) =>
-      session.workspaceId === workspaceId || (session.workspaceId === undefined && session.cwd === workspace?.root));
-
-    if (nextSession) {
-      selectTask(nextSession.id);
-      return;
-    }
-
-    const previous = selectedSessionIdRef.current;
-    snapshotRevision.current += 1;
-    selectedSessionIdRef.current = undefined;
-    setSelectedSessionId(undefined);
-    setSelectedModelId(undefined);
-    setSnapshot(undefined);
-    if (previous) void window.desktop.unwatchTask(previous);
-  }, [selectTask, sessions, workspaces]);
+    const workspace = workspacesRef.current.find((item) => item.id === workspaceId);
+    if (!workspace) return;
+    applySelection(workspaceId, sessionsForWorkspace(workspace, sessionsRef.current)[0]?.id);
+  }, [applySelection]);
 
   const chooseWorkspaceFolder = useCallback(async () => {
     try {
@@ -119,27 +135,98 @@ export function useWorkbench(connected: boolean) {
   const createWorkspace = useCallback(async (root: string) => {
     try {
       const workspace = await window.desktop.createWorkspace({ root });
-      await refreshOverview();
-      setSelectedWorkspaceId(workspace.id);
+      const nextWorkspaces = [...workspacesRef.current.filter((item) => item.id !== workspace.id), workspace];
+      workspacesRef.current = nextWorkspaces;
+      setWorkspaces(nextWorkspaces);
+      applySelection(workspace.id, undefined);
+      void refreshOverview();
       return workspace;
     } catch {
       setError('无法添加这个工作区文件夹。');
       return undefined;
     }
-  }, [refreshOverview]);
+  }, [applySelection, refreshOverview]);
+
+  const createWorkspaceFolder = useCallback(async (name: string) => {
+    try {
+      const workspace = await window.desktop.createWorkspaceFolder({ name });
+      if (!workspace) return undefined;
+      const nextWorkspaces = [...workspacesRef.current.filter((item) => item.id !== workspace.id), workspace];
+      workspacesRef.current = nextWorkspaces;
+      setWorkspaces(nextWorkspaces);
+      applySelection(workspace.id, undefined);
+      void refreshOverview();
+      return workspace;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '无法创建工作区文件夹。');
+      return undefined;
+    }
+  }, [applySelection, refreshOverview]);
+
+  const renameWorkspace = useCallback(async (workspaceId: string, name: string) => {
+    try {
+      const workspace = await window.desktop.renameWorkspace({ workspaceId, name });
+      const next = workspacesRef.current.map((item) => item.id === workspace.id ? workspace : item);
+      workspacesRef.current = next;
+      setWorkspaces(next);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '无法重命名工作区。');
+      return false;
+    }
+  }, []);
+
+  const removeWorkspace = useCallback(async (workspaceId: string) => {
+    try {
+      await window.desktop.removeWorkspace({ workspaceId });
+      const nextWorkspaces = workspacesRef.current.filter((item) => item.id !== workspaceId);
+      const nextSessions = sessionsRef.current.filter((session) => workspaceIdForSession(session, workspacesRef.current) !== workspaceId);
+      workspacesRef.current = nextWorkspaces;
+      sessionsRef.current = nextSessions;
+      setWorkspaces(nextWorkspaces);
+      setSessions(nextSessions);
+      const navigation = resolveNavigation(nextWorkspaces, nextSessions, selectedWorkspaceIdRef.current === workspaceId ? undefined : selectedWorkspaceIdRef.current, selectedSessionIdRef.current);
+      applySelection(navigation.workspaceId, navigation.sessionId);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '无法从列表清除工作区。');
+      return false;
+    }
+  }, [applySelection]);
 
   const createTask = useCallback(async (input?: CreateTaskRequest) => {
     try {
       const next = await window.desktop.createTask(input);
       if (!next) return undefined;
-      await refreshOverview();
-      selectTask(next.id);
+      const nextSessions = mergeSessions(sessionsRef.current, [next]);
+      sessionsRef.current = nextSessions;
+      setSessions(nextSessions);
+      const workspaceId = workspaceIdForSession(next, workspacesRef.current)
+        ?? (input?.target === 'workspace' ? input.workspaceId : selectedWorkspaceIdRef.current);
+      applySelection(workspaceId, next.id);
+      void refreshOverview();
       return next;
     } catch {
       setError('无法创建任务，请检查本地服务和工作区路径。');
       return undefined;
     }
-  }, [refreshOverview, selectTask]);
+  }, [applySelection, refreshOverview]);
+
+  const loadMoreWorkspaceSessions = useCallback(async (workspaceId: string) => {
+    const workspace = workspacesRef.current.find((item) => item.id === workspaceId);
+    if (!workspace) return;
+    const existing = sessionsForWorkspace(workspace, sessionsRef.current);
+    setWorkspacePages((current) => ({ ...current, [workspaceId]: { ...current[workspaceId], loading: true, hasMore: current[workspaceId]?.hasMore ?? workspace.sessionCount > existing.length, error: undefined } }));
+    try {
+      const page = await window.desktop.listSessionPage({ workspaceId, pageSize: 20, beforeId: existing.at(-1)?.id });
+      const nextSessions = mergeSessions(sessionsRef.current, page.items);
+      sessionsRef.current = nextSessions;
+      setSessions(nextSessions);
+      setWorkspacePages((current) => ({ ...current, [workspaceId]: { loading: false, hasMore: page.hasMore } }));
+    } catch {
+      setWorkspacePages((current) => ({ ...current, [workspaceId]: { loading: false, hasMore: current[workspaceId]?.hasMore ?? true, error: '无法读取更多任务。' } }));
+    }
+  }, []);
 
   const sendPrompt = useCallback(async (text: string, model: string) => {
     const sessionId = selectedSessionIdRef.current;
@@ -212,17 +299,18 @@ export function useWorkbench(connected: boolean) {
   const archiveTask = useCallback(async (sessionId: string) => {
     try {
       await window.desktop.archiveSession(sessionId);
+      const nextSessions = sessionsRef.current.filter((session) => session.id !== sessionId);
+      sessionsRef.current = nextSessions;
+      setSessions(nextSessions);
       if (selectedSessionIdRef.current === sessionId) {
-        selectedSessionIdRef.current = undefined;
-        setSelectedSessionId(undefined);
-        setSnapshot(undefined);
-        void window.desktop.unwatchTask(sessionId);
+        const navigation = resolveNavigation(workspacesRef.current, nextSessions, selectedWorkspaceIdRef.current);
+        applySelection(navigation.workspaceId, navigation.sessionId);
       }
       await refreshOverview();
     } catch {
       setError('无法归档这个任务。');
     }
-  }, [refreshOverview]);
+  }, [applySelection, refreshOverview]);
 
 
   const loadArchivedSessions = useCallback(async () => {
@@ -291,27 +379,33 @@ export function useWorkbench(connected: boolean) {
     if (!sessionId) return false;
     try {
       const next = await window.desktop.forkSession({ sessionId, title });
-      await refreshOverview();
-      selectTask(next.id);
+      const nextSessions = mergeSessions(sessionsRef.current, [next]);
+      sessionsRef.current = nextSessions;
+      setSessions(nextSessions);
+      applySelection(workspaceIdForSession(next, workspacesRef.current) ?? selectedWorkspaceIdRef.current, next.id);
+      void refreshOverview();
       return true;
     } catch {
       setError('无法从当前上下文派生新任务。');
       return false;
     }
-  }, [ensureIdleSession, refreshOverview, selectTask]);
+  }, [applySelection, ensureIdleSession, refreshOverview]);
 
   const restoreTask = useCallback(async (sessionId: string): Promise<boolean> => {
     try {
       const restored = await window.desktop.restoreSession({ sessionId });
       setArchivedSessions((current) => current.filter((session) => session.id !== sessionId));
-      await refreshOverview();
-      selectTask(restored.id);
+      const nextSessions = mergeSessions(sessionsRef.current, [restored]);
+      sessionsRef.current = nextSessions;
+      setSessions(nextSessions);
+      applySelection(workspaceIdForSession(restored, workspacesRef.current) ?? selectedWorkspaceIdRef.current, restored.id);
+      void refreshOverview();
       return true;
     } catch {
       setError('无法恢复这个已归档任务。');
       return false;
     }
-  }, [refreshOverview, selectTask]);
+  }, [applySelection, refreshOverview]);
 
   const updateRuntime = useCallback(async (patch: Parameters<typeof updateSessionRuntime>[0]): Promise<boolean> => {
     try {
@@ -331,6 +425,8 @@ export function useWorkbench(connected: boolean) {
       setSessions([]);
       setModels([]);
       setSelectedModelId(undefined);
+      selectedWorkspaceIdRef.current = undefined;
+      selectedSessionIdRef.current = undefined;
       setSelectedWorkspaceId(undefined);
       setSelectedSessionId(undefined);
       setSnapshot(undefined);
@@ -356,11 +452,13 @@ export function useWorkbench(connected: boolean) {
         void refreshSnapshot(event.sessionId);
         scheduleRuntimeRefresh();
       }
-      void refreshOverview();
+      if (overviewTimer.current !== undefined) window.clearTimeout(overviewTimer.current);
+      overviewTimer.current = window.setTimeout(() => { void refreshOverview(); }, 120);
     });
   }, [connected, refreshOverview, refreshSnapshot, scheduleRuntimeRefresh]);
 
   useEffect(() => () => {
+    if (overviewTimer.current !== undefined) window.clearTimeout(overviewTimer.current);
     void window.desktop.unwatchTask(selectedSessionIdRef.current);
   }, []);
 
@@ -377,7 +475,9 @@ export function useWorkbench(connected: boolean) {
     workspaces,
     models,
     activeModelId,
-    sessions: visibleSessions,
+    sessions,
+    visibleSessions,
+    workspacePages,
     selectedWorkspaceId,
     selectedSession,
     selectedSessionId,
@@ -397,6 +497,10 @@ export function useWorkbench(connected: boolean) {
       selectTask,
       chooseWorkspaceFolder,
       createWorkspace,
+      createWorkspaceFolder,
+      renameWorkspace,
+      removeWorkspace,
+      loadMoreWorkspaceSessions,
       createTask,
       selectModel: setSelectedModelId,
       sendPrompt,
@@ -418,3 +522,4 @@ export function useWorkbench(connected: boolean) {
     },
   };
 }
+

@@ -66,6 +66,7 @@ export function App() {
         selectedModelId={workbench.activeModelId}
         selectedWorkspaceId={workbench.selectedWorkspaceId}
         sessions={workbench.sessions}
+        workspacePages={workbench.workspacePages}
         archivedSessions={workbench.archivedSessions}
         archivedLoading={workbench.archivedLoading}
         selectedSession={workbench.selectedSession}
@@ -85,13 +86,17 @@ export function App() {
         onStop={() => void desktop.stopServer()}
         onSelectWorkspace={workbench.actions.selectWorkspace}
         onSelectTask={workbench.actions.selectTask}
-        onCreateTask={(input) => void workbench.actions.createTask(input)}
+        onCreateTask={workbench.actions.createTask}
         onSelectModel={workbench.actions.selectModel}
         onRuntimeChange={(patch) => void workbench.actions.updateRuntime(patch)}
         onRefreshRuntime={() => void workbench.actions.refreshRuntime()}
         onDraftConsumed={workbench.actions.clearComposerDraft}
         onChooseWorkspaceFolder={workbench.actions.chooseWorkspaceFolder}
         onCreateWorkspace={workbench.actions.createWorkspace}
+        onCreateWorkspaceFolder={workbench.actions.createWorkspaceFolder}
+        onRenameWorkspace={workbench.actions.renameWorkspace}
+        onRemoveWorkspace={workbench.actions.removeWorkspace}
+        onLoadMoreWorkspaceSessions={(workspaceId) => void workbench.actions.loadMoreWorkspaceSessions(workspaceId)}
         onSendPrompt={workbench.actions.sendPrompt}
         onAbort={() => void workbench.actions.abort()}
         onApprovalDecision={(approvalId, decision, feedback, selectedLabel) => selectedSessionId ? workbench.actions.respondApproval({ sessionId: selectedSessionId, approvalId, decision, feedback, selectedLabel }) : Promise.resolve(false)}
@@ -99,7 +104,7 @@ export function App() {
         onDismiss={(questionId) => selectedSessionId && void workbench.actions.dismissQuestion({ sessionId: selectedSessionId, questionId })}
         onRenameTask={(sessionId, title) => void workbench.actions.renameTask(sessionId, title)}
         onArchiveTask={(sessionId) => void workbench.actions.archiveTask(sessionId)}
-        onLoadArchived={() => void workbench.actions.loadArchivedSessions()}
+        onLoadArchived={workbench.actions.loadArchivedSessions}
         onRestoreTask={workbench.actions.restoreTask}
         onUndoTask={workbench.actions.undoTask}
         onCompactTask={workbench.actions.compactTask}

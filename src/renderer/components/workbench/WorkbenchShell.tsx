@@ -35,9 +35,10 @@ import { NewTaskDialog } from './NewTaskDialog';
 import { SessionActionDialogs, type SessionDialogAction } from './SessionActionDialogs';
 import { SessionActionsMenu } from './SessionActionsMenu';
 import { SettingsDialog } from './SettingsDialog';
-import { filterSessions, formatSessionTime, sessionPresentation } from './session-presentation';
 import { TaskComposer } from './TaskComposer';
 import { TaskTimeline } from './TaskTimeline';
+import { WorkspaceSidebar } from './WorkspaceSidebar';
+import type { WorkspacePageState } from './WorkspaceGroup';
 import { presentWorkbenchStatus } from './workbench-status';
 
 const fallbackCapabilities: DesktopCapabilitySnapshot = {
@@ -69,6 +70,7 @@ interface WorkbenchShellProps {
   selectedModelId: string | undefined;
   selectedWorkspaceId: string | undefined;
   sessions: DesktopSession[];
+  workspacePages?: Record<string, WorkspacePageState>;
   archivedSessions: DesktopSession[];
   archivedLoading: boolean;
   selectedSession: DesktopSession | undefined;
@@ -89,13 +91,17 @@ interface WorkbenchShellProps {
   onStop(): void;
   onSelectWorkspace(workspaceId: string): void;
   onSelectTask(sessionId: string): void;
-  onCreateTask(input: CreateTaskRequest): void;
+  onCreateTask(input: CreateTaskRequest): void | Promise<DesktopSession | undefined>;
   onSelectModel(modelId: string): void;
   onRuntimeChange(patch: Omit<UpdateRuntimeRequest, 'sessionId'>): void;
   onRefreshRuntime(): void;
   onDraftConsumed(): void;
   onChooseWorkspaceFolder(): Promise<string | null>;
   onCreateWorkspace(root: string): Promise<DesktopWorkspace | undefined>;
+  onCreateWorkspaceFolder?(name: string): Promise<DesktopWorkspace | undefined>;
+  onRenameWorkspace?(workspaceId: string, name: string): Promise<boolean>;
+  onRemoveWorkspace?(workspaceId: string): Promise<boolean>;
+  onLoadMoreWorkspaceSessions?(workspaceId: string): void;
   onSendPrompt(text: string, modelId: string): Promise<void>;
   onAbort(): void;
   onApprovalDecision(approvalId: string, decision: 'approved' | 'rejected', feedback?: string, selectedLabel?: string): Promise<boolean>;
@@ -103,7 +109,7 @@ interface WorkbenchShellProps {
   onDismiss(questionId: string): void;
   onRenameTask?(sessionId: string, title: string): void;
   onArchiveTask?(sessionId: string): void;
-  onLoadArchived(): void;
+  onLoadArchived(): void | Promise<DesktopSession[]>;
   onRestoreTask(sessionId: string): Promise<boolean>;
   onUndoTask(): Promise<boolean>;
   onCompactTask(instruction?: string): Promise<boolean>;
@@ -124,6 +130,7 @@ export function WorkbenchShell({
   selectedModelId,
   selectedWorkspaceId,
   sessions,
+  workspacePages = {},
   archivedSessions,
   archivedLoading,
   selectedSession,
@@ -151,6 +158,10 @@ export function WorkbenchShell({
   onDraftConsumed,
   onChooseWorkspaceFolder,
   onCreateWorkspace,
+  onCreateWorkspaceFolder = async () => undefined,
+  onRenameWorkspace = async () => false,
+  onRemoveWorkspace = async () => false,
+  onLoadMoreWorkspaceSessions = () => undefined,
   onSendPrompt,
   onAbort,
   onApprovalDecision,
@@ -170,10 +181,10 @@ export function WorkbenchShell({
   const [selectedTaskId, setSelectedTaskId] = useState<string>();
   const [reviewError, setReviewError] = useState<string>();
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newTaskWorkspaceId, setNewTaskWorkspaceId] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('kimi-desktop:sidebar') === 'collapsed');
   const [serviceDetailsOpen, setServiceDetailsOpen] = useState(false);
-  const [query, setQuery] = useState('');
   const [selectingWorkspace, setSelectingWorkspace] = useState(false);
   const [renamingSessionId, setRenamingSessionId] = useState<string>();
   const [renameValue, setRenameValue] = useState('');
@@ -191,7 +202,6 @@ export function WorkbenchShell({
   const visibleError = reviewError ?? error;
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId);
   const statusSummary = presentWorkbenchStatus(status, selectedSession, snapshot);
-  const filteredSessions = useMemo(() => filterSessions(sessions, query), [query, sessions]);
 
   useEffect(() => {
     if (newTaskRequest === undefined || newTaskRequest === lastNewTaskRequest.current) return;
@@ -230,7 +240,7 @@ export function WorkbenchShell({
     return () => window.removeEventListener('keydown', onShortcut);
   });
 
-  const openWorkspaceFolder = async () => {
+  const addExistingWorkspace = async (openTask = false) => {
     setSelectingWorkspace(true);
     try {
       const root = await onChooseWorkspaceFolder();
@@ -238,18 +248,19 @@ export function WorkbenchShell({
       const workspace = await onCreateWorkspace(root);
       if (!workspace) return;
       onSelectWorkspace(workspace.id);
-      setNewTaskOpen(true);
+      if (openTask) { setNewTaskWorkspaceId(workspace.id); setNewTaskOpen(true); }
     } finally {
       setSelectingWorkspace(false);
     }
   };
 
-  const openNewTask = () => {
+  const openNewTask = (workspaceId?: string) => {
     if (!connected) return;
     if (workspaces.length === 0) {
-      void openWorkspaceFolder();
+      void addExistingWorkspace(true);
       return;
     }
+    setNewTaskWorkspaceId(workspaceId ?? selectedWorkspaceId);
     setNewTaskOpen(true);
   };
 
@@ -278,7 +289,7 @@ export function WorkbenchShell({
       <aside className="workbench-rail">
         <nav aria-label="工作台导航">
           <button type="button" className="rail-brand" aria-label="Kimi Code Desktop" onClick={() => setSidebarCollapsed(false)}><img src={kimiIcon} alt="" /></button>
-          <button type="button" className="rail-action rail-action--primary" aria-label="新建任务" title="新建任务 Ctrl+N" disabled={!connected} onClick={openNewTask}><Plus size={18} /></button>
+          <button type="button" className="rail-action rail-action--primary" aria-label="新建任务" title="新建任务 Ctrl+N" disabled={!connected} onClick={() => openNewTask()}><Plus size={18} /></button>
           <button type="button" className="rail-action rail-action--active" aria-label="任务工作台" aria-current="page"><Bot size={18} /></button>
         </nav>
         <div className="rail-bottom">
@@ -294,58 +305,24 @@ export function WorkbenchShell({
           <button type="button" className="icon-button" aria-label="收起侧边栏" onClick={() => setSidebarCollapsed(true)}><PanelLeftClose size={15} /></button>
         </header>
 
-        <section className="workspace-switcher">
-          <label htmlFor="workspace-select">当前工作区</label>
-          <div className="workspace-select-wrap">
-            <Folder size={15} />
-            <select id="workspace-select" value={selectedWorkspaceId ?? ''} onChange={(event) => onSelectWorkspace(event.target.value)} disabled={!connected || workspaces.length === 0}>
-              <option value="" disabled>{workspaces.length === 0 ? '尚未添加工作区' : '选择工作区'}</option>
-              {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
-            </select>
-            <ChevronDown size={14} />
-          </div>
-          <div className="workspace-path" title={selectedWorkspace?.root}>{selectedWorkspace?.root ?? '选择一个本机文件夹开始'}</div>
-        </section>
-
-        <div className="sidebar-toolbar">
-          <label className="task-search">
-            <Search size={14} />
-            <input type="search" aria-label="搜索任务" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索任务" />
-            {query ? <button type="button" aria-label="清除搜索" onClick={() => setQuery('')}><X size={13} /></button> : <kbd>⌘K</kbd>}
-          </label>
-          <button type="button" className="icon-button icon-button--strong" aria-label="新建任务" disabled={!connected} onClick={openNewTask}><Plus size={16} /></button>
-        </div>
-
-        <section className="session-section">
-          <header><div><span>任务</span><small>{filteredSessions.length}</small></div><button type="button" className="session-section__archive" aria-label="查看已归档任务" title="查看已归档任务" onClick={() => setArchivedOpen(true)}><Archive size={13} /></button></header>
-          <div className="session-list">
-            {filteredSessions.map((session) => {
-              const presentation = sessionPresentation(session);
-              const active = session.id === selectedSession?.id;
-              return (
-                <article key={session.id} className={`session-row ${active ? 'session-row--active' : ''}`}>
-                  {renamingSessionId === session.id ? (
-                    <form className="session-rename" onSubmit={(event) => { event.preventDefault(); commitRename(); }}>
-                      <input autoFocus aria-label="新的任务标题" value={renameValue} onChange={(event) => setRenameValue(event.target.value)} onBlur={commitRename} onKeyDown={(event) => { if (event.key === 'Escape') setRenamingSessionId(undefined); }} />
-                    </form>
-                  ) : (
-                    <button type="button" className="session-row__main" onClick={() => onSelectTask(session.id)}>
-                      <span className={`session-indicator session-indicator--${presentation.tone}`}>{session.busy ? <LoaderCircle size={12} /> : <CircleDot size={12} />}</span>
-                      <span className="session-row__copy"><strong>{session.title || '未命名任务'}</strong><small>{session.lastPrompt || session.cwd || '等待第一条请求'}</small></span>
-                      <span className="session-row__time">{formatSessionTime(session.updatedAt)}</span>
-                    </button>
-                  )}
-                  <div className="session-row__actions">
-                    <button type="button" aria-label="重命名任务" title="重命名任务" onClick={() => startRename(session)}><Pencil size={13} /></button>
-                    <button type="button" aria-label="归档任务" title="归档任务" onClick={() => setArchiveTarget(session)}><Archive size={13} /></button>
-                  </div>
-                  <span className={`session-state session-state--${presentation.tone}`}>{presentation.label}</span>
-                </article>
-              );
-            })}
-            {filteredSessions.length === 0 ? <div className="session-list-empty"><Search size={18} /><span>{query ? '没有匹配的任务' : '这个工作区还没有任务'}</span><button type="button" onClick={openNewTask}>创建第一个任务</button></div> : null}
-          </div>
-        </section>
+        <WorkspaceSidebar
+          connected={connected}
+          workspaces={workspaces}
+          sessions={sessions}
+          selectedSessionId={selectedSession?.id}
+          workspacePages={workspacePages}
+          onSelectTask={onSelectTask}
+          onNewTask={openNewTask}
+          onAddExisting={() => addExistingWorkspace(false)}
+          onCreateWorkspace={async (name) => { const workspace = await onCreateWorkspaceFolder(name); if (!workspace) return false; onSelectWorkspace(workspace.id); return true; }}
+          onRenameWorkspace={onRenameWorkspace}
+          onRemoveWorkspace={onRemoveWorkspace}
+          onRevealWorkspace={(root) => { void window.desktop.revealPath({ path: root }).catch(() => setReviewError('无法在资源管理器中打开工作区。')); }}
+          onRenameTask={onRenameTask}
+          onArchiveTask={setArchiveTarget}
+          onOpenArchived={() => setArchivedOpen(true)}
+          onLoadMore={onLoadMoreWorkspaceSessions}
+        />
 
         <footer className={`runtime-card runtime-card--${status.server.kind}`}>
           {cliUpdate.updateAvailable ? (
@@ -415,8 +392,8 @@ export function WorkbenchShell({
                 <button type="button" className="button" onClick={onStart}><Gauge size={15} />启动本地服务</button>
               ) : (
                 <>
-                  <button type="button" className="button" onClick={selectedWorkspace ? openNewTask : () => void openWorkspaceFolder()}>{selectedWorkspace ? <Plus size={15} /> : <FolderPlus size={15} />}{selectedWorkspace ? '新建任务' : selectingWorkspace ? '正在选择…' : '打开本机文件夹'}</button>
-                  {selectedWorkspace ? <button type="button" className="button button--secondary" onClick={() => void openWorkspaceFolder()}><FolderPlus size={15} />添加工作区</button> : null}
+                  <button type="button" className="button" onClick={selectedWorkspace ? () => openNewTask(selectedWorkspace.id) : () => void addExistingWorkspace(true)}>{selectedWorkspace ? <Plus size={15} /> : <FolderPlus size={15} />}{selectedWorkspace ? '新建任务' : selectingWorkspace ? '正在选择…' : '打开本机文件夹'}</button>
+                  {selectedWorkspace ? <button type="button" className="button button--secondary" onClick={() => void addExistingWorkspace(false)}><FolderPlus size={15} />添加工作区</button> : null}
                 </>
               )}
             </div>
@@ -425,12 +402,20 @@ export function WorkbenchShell({
         )}
       </section>
 
-      <NewTaskDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onCreateTask={onCreateTask} onChooseFolder={onChooseWorkspaceFolder} onCreateWorkspace={onCreateWorkspace} />
+      <NewTaskDialog open={newTaskOpen} onOpenChange={(open) => { setNewTaskOpen(open); if (!open) setNewTaskWorkspaceId(undefined); }} workspaces={workspaces} selectedWorkspaceId={newTaskWorkspaceId ?? selectedWorkspaceId} onCreateTask={onCreateTask} onChooseFolder={onChooseWorkspaceFolder} onCreateWorkspace={onCreateWorkspace} />
       <SettingsDialog open={settingsOpen} status={status} capabilities={capabilities} theme={theme} cliUpdate={cliUpdate} onThemeChange={onThemeChange} onCheckCliUpdate={onCheckCliUpdate} onInstallCliUpdate={onInstallCliUpdate} onRefreshCapabilities={onRefreshCapabilities} onOpenChange={setSettingsOpen} />
 
 
       <SessionActionDialogs action={sessionDialogAction} sessionTitle={selectedSession?.title ?? ''} onClose={() => setSessionDialogAction(undefined)} onUndo={onUndoTask} onCompact={onCompactTask} onFork={onForkTask} />
       <ArchivedSessionsDialog open={archivedOpen} sessions={archivedSessions} loading={archivedLoading} onOpenChange={setArchivedOpen} onLoad={onLoadArchived} onRestore={onRestoreTask} />
+
+      <Dialog.Root open={renamingSessionId !== undefined} onOpenChange={(open) => { if (!open) setRenamingSessionId(undefined); }}>
+        <Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="confirm-dialog" aria-label="重命名任务">
+          <Dialog.Title>重命名任务</Dialog.Title><Dialog.Description>为当前任务设置一个更容易识别的标题。</Dialog.Description>
+          <input className="confirm-dialog__input" autoFocus aria-label="新的任务标题" value={renameValue} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') commitRename(); }} />
+          <footer><Dialog.Close asChild><button type="button" className="button button--secondary">取消</button></Dialog.Close><button type="button" className="button" onClick={commitRename}>保存</button></footer>
+        </Dialog.Content></Dialog.Portal>
+      </Dialog.Root>
 
       <Dialog.Root open={archiveTarget !== undefined} onOpenChange={(open) => { if (!open) setArchiveTarget(undefined); }}>
         <Dialog.Portal>
@@ -474,3 +459,4 @@ function permissionLabel(permission: 'manual' | 'yolo' | 'auto' | undefined): st
 function leafPath(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 }
+

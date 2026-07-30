@@ -27,6 +27,17 @@ describe('ArchivedSessionsDialog', () => {
     expect(screen.getByText('正在读取归档任务…')).not.toBeNull();
   });
 
+  it('does not reload when an open dialog rerenders with a new callback identity', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<ArchivedSessionsDialog open sessions={[]} loading={false} onOpenChange={vi.fn()} onLoad={first} onRestore={vi.fn()} />);
+    expect(first).toHaveBeenCalledOnce();
+
+    rerender(<ArchivedSessionsDialog open sessions={[]} loading={false} onOpenChange={vi.fn()} onLoad={second} onRestore={vi.fn()} />);
+    expect(first).toHaveBeenCalledOnce();
+    expect(second).not.toHaveBeenCalled();
+  });
+
   it('restores a session and closes after success', async () => {
     const user = userEvent.setup();
     const onRestore = vi.fn().mockResolvedValue(true);
