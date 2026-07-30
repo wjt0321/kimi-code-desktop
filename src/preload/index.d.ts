@@ -1,18 +1,24 @@
 import type {
   ApprovalDecisionRequest,
+  CompactSessionRequest,
   CreateTaskRequest,
   DesktopMessage,
   DesktopModel,
   DesktopSession,
+  DesktopSessionRuntime,
   DesktopStatus,
   DesktopTaskEvent,
   DesktopTaskSnapshot,
   DesktopWorkspace,
+  ForkSessionRequest,
   PromptRequest,
   QuestionDismissRequest,
   QuestionResponseRequest,
   RenameSessionRequest,
+  RestoreSessionRequest,
   TaskWatchRequest,
+  UndoSessionRequest,
+  UpdateRuntimeRequest,
   WorkspaceRootRequest,
 } from '../shared/contracts';
 
@@ -28,6 +34,13 @@ export interface DesktopApi {
   chooseWorkspaceFolder(): Promise<string | null>;
   createWorkspace(input: WorkspaceRootRequest): Promise<DesktopWorkspace>;
   listSessions(): Promise<DesktopSession[]>;
+  listArchivedSessions(): Promise<DesktopSession[]>;
+  getSessionRuntime(sessionId: string): Promise<DesktopSessionRuntime>;
+  updateSessionRuntime(input: UpdateRuntimeRequest): Promise<DesktopSessionRuntime>;
+  compactSession(input: CompactSessionRequest): Promise<void>;
+  undoSession(input: UndoSessionRequest): Promise<void>;
+  forkSession(input: ForkSessionRequest): Promise<DesktopSession>;
+  restoreSession(input: RestoreSessionRequest): Promise<DesktopSession>;
   listModels(): Promise<DesktopModel[]>;
   renameSession(input: RenameSessionRequest): Promise<void>;
   archiveSession(sessionId: string): Promise<void>;

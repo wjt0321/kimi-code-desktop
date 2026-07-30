@@ -3,30 +3,42 @@ import { z } from 'zod';
 
 import {
   ApprovalDecisionRequestSchema,
+  CompactSessionRequestSchema,
   CreateTaskRequestSchema,
   DesktopMessageSchema,
   DesktopModelSchema,
+  DesktopSessionRuntimeSchema,
   DesktopSessionSchema,
   DesktopStatusSchema,
   DesktopTaskEventSchema,
   DesktopTaskSnapshotSchema,
   DesktopWorkspaceSchema,
+  ForkSessionRequestSchema,
   PromptRequestSchema,
   QuestionDismissRequestSchema,
   QuestionResponseRequestSchema,
   RenameSessionRequestSchema,
+  RestoreSessionRequestSchema,
   SessionIdSchema,
   TaskWatchRequestSchema,
+  UndoSessionRequestSchema,
+  UpdateRuntimeRequestSchema,
   WorkspaceRootRequestSchema,
   type DesktopMessage,
   type DesktopModel,
+  type CompactSessionRequest,
   type DesktopSession,
+  type DesktopSessionRuntime,
   type DesktopStatus,
   type DesktopTaskEvent,
   type DesktopTaskSnapshot,
   type DesktopWorkspace,
+  type ForkSessionRequest,
   type PromptRequest,
   type RenameSessionRequest,
+  type RestoreSessionRequest,
+  type UndoSessionRequest,
+  type UpdateRuntimeRequest,
 } from '../shared/contracts';
 
 function parseStatus(value: unknown): DesktopStatus {
@@ -35,6 +47,10 @@ function parseStatus(value: unknown): DesktopStatus {
 
 function parseSession(value: unknown): DesktopSession {
   return DesktopSessionSchema.parse(value);
+}
+
+function parseSessionRuntime(value: unknown): DesktopSessionRuntime {
+  return DesktopSessionRuntimeSchema.parse(value);
 }
 
 function parseMessages(value: unknown): DesktopMessage[] {
@@ -98,6 +114,13 @@ contextBridge.exposeInMainWorld('desktop', {
   chooseWorkspaceFolder: () => ipcRenderer.invoke('desktop:choose-workspace-folder').then(parseFolder),
   createWorkspace: (input: { root: string }) => ipcRenderer.invoke('desktop:create-workspace', WorkspaceRootRequestSchema.parse(input)).then(parseWorkspace),
   listSessions: () => ipcRenderer.invoke('desktop:list-sessions').then(parseSessions),
+  listArchivedSessions: () => ipcRenderer.invoke('desktop:list-archived-sessions').then(parseSessions),
+  getSessionRuntime: (sessionId: string) => ipcRenderer.invoke('desktop:get-session-runtime', SessionIdSchema.parse(sessionId)).then(parseSessionRuntime),
+  updateSessionRuntime: (input: UpdateRuntimeRequest) => ipcRenderer.invoke('desktop:update-session-runtime', UpdateRuntimeRequestSchema.parse(input)).then(parseSessionRuntime),
+  compactSession: (input: CompactSessionRequest) => ipcRenderer.invoke('desktop:compact-session', CompactSessionRequestSchema.parse(input)),
+  undoSession: (input: UndoSessionRequest) => ipcRenderer.invoke('desktop:undo-session', UndoSessionRequestSchema.parse(input)),
+  forkSession: (input: ForkSessionRequest) => ipcRenderer.invoke('desktop:fork-session', ForkSessionRequestSchema.parse(input)).then(parseSession),
+  restoreSession: (input: RestoreSessionRequest) => ipcRenderer.invoke('desktop:restore-session', RestoreSessionRequestSchema.parse(input)).then(parseSession),
   listModels: () => ipcRenderer.invoke('desktop:list-models').then(parseModels),
   renameSession: (input: RenameSessionRequest) => ipcRenderer.invoke('desktop:rename-session', RenameSessionRequestSchema.parse(input)),
   archiveSession: (sessionId: string) => ipcRenderer.invoke('desktop:archive-session', SessionIdSchema.parse(sessionId)),

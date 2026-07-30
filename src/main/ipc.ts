@@ -1,4 +1,22 @@
-import type { CliDiscovery, DesktopStatus, DesktopTaskEvent, ServerStatus } from '../shared/contracts';
+import {
+  CompactSessionRequestSchema,
+  ForkSessionRequestSchema,
+  RestoreSessionRequestSchema,
+  SessionIdSchema,
+  UndoSessionRequestSchema,
+  UpdateRuntimeRequestSchema,
+  type CliDiscovery,
+  type CompactSessionRequest,
+  type DesktopSession,
+  type DesktopSessionRuntime,
+  type DesktopStatus,
+  type DesktopTaskEvent,
+  type ForkSessionRequest,
+  type RestoreSessionRequest,
+  type ServerStatus,
+  type UndoSessionRequest,
+  type UpdateRuntimeRequest,
+} from '../shared/contracts';
 
 export interface ServerLifecyclePort {
   snapshot(): ServerStatus;
@@ -89,4 +107,27 @@ export class DesktopController {
     const status = this.status();
     for (const listener of this.#listeners) listener(status);
   }
+}
+
+
+export interface SessionIpcClientPort {
+  listArchivedSessions(): Promise<DesktopSession[]>;
+  getSessionRuntime(sessionId: string): Promise<DesktopSessionRuntime>;
+  updateSessionRuntime(input: UpdateRuntimeRequest): Promise<DesktopSessionRuntime>;
+  compactSession(input: CompactSessionRequest): Promise<void>;
+  undoSession(input: UndoSessionRequest): Promise<void>;
+  forkSession(input: ForkSessionRequest): Promise<DesktopSession>;
+  restoreSession(input: RestoreSessionRequest): Promise<DesktopSession>;
+}
+
+export function createSessionIpcHandlers(client: SessionIpcClientPort) {
+  return {
+    listArchived: async () => client.listArchivedSessions(),
+    getRuntime: async (sessionId: unknown) => client.getSessionRuntime(SessionIdSchema.parse(sessionId)),
+    updateRuntime: async (input: unknown) => client.updateSessionRuntime(UpdateRuntimeRequestSchema.parse(input)),
+    compact: async (input: unknown) => client.compactSession(CompactSessionRequestSchema.parse(input)),
+    undo: async (input: unknown) => client.undoSession(UndoSessionRequestSchema.parse(input)),
+    fork: async (input: unknown) => client.forkSession(ForkSessionRequestSchema.parse(input)),
+    restore: async (input: unknown) => client.restoreSession(RestoreSessionRequestSchema.parse(input)),
+  };
 }

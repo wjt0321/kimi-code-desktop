@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { CliDiscovery, ServerStatus } from '../shared/contracts';
-import { DesktopController } from './ipc';
+import { createSessionIpcHandlers, DesktopController } from './ipc';
 
 function readyCli(): CliDiscovery {
   return { kind: 'ready', command: 'C:\\tools\\kimi.cmd', version: '0.30.0' };
@@ -60,5 +60,56 @@ describe('task watching', () => {
     await controller.watchTask('session-1', 'main');
 
     expect(feed.watch).toHaveBeenCalledWith('session-1', 'main');
+  });
+});
+
+
+describe('session IPC handlers', () => {
+  it('validates runtime and lifecycle inputs before forwarding them', async () => {
+    const client = {
+      listArchivedSessions: vi.fn(async () => []),
+      getSessionRuntime: vi.fn(async () => ({
+        available: true,
+        thinkingLevel: 'off',
+        permission: 'manual' as const,
+        planMode: false,
+        swarmMode: false,
+        contextTokens: 0,
+        maxContextTokens: 0,
+        contextUsage: 0,
+        warnings: [],
+      })),
+      updateSessionRuntime: vi.fn(async (input) => ({
+        available: true,
+        thinkingLevel: input.thinkingLevel ?? 'off',
+        permission: input.permission ?? 'manual',
+        planMode: input.planMode ?? false,
+        swarmMode: false,
+        contextTokens: 0,
+        maxContextTokens: 0,
+        contextUsage: 0,
+        warnings: [],
+      })),
+      compactSession: vi.fn(async () => undefined),
+      undoSession: vi.fn(async () => undefined),
+      forkSession: vi.fn(async () => ({ id: 'forked', title: '派生任务', updatedAt: '2026-07-30T00:00:00.000Z', busy: false, cwd: 'C:\\repo' })),
+      restoreSession: vi.fn(async () => ({ id: 'restored', title: '恢复任务', updatedAt: '2026-07-30T00:00:00.000Z', busy: false, cwd: 'C:\\repo' })),
+    };
+    const handlers = createSessionIpcHandlers(client);
+
+    await expect(handlers.updateRuntime({ sessionId: 's1' })).rejects.toThrow('必须提供至少一项运行策略更新');
+    expect(client.updateSessionRuntime).not.toHaveBeenCalled();
+
+    await handlers.updateRuntime({ sessionId: 's1', permission: 'auto' });
+    await handlers.compact({ sessionId: 's1', instruction: ' 保留决策 ' });
+    await handlers.undo({ sessionId: 's1' });
+    await handlers.fork({ sessionId: 's1', title: ' 派生任务 ' });
+    await handlers.restore({ sessionId: 's1' });
+
+    expect(client.updateSessionRuntime).toHaveBeenCalledWith({ sessionId: 's1', permission: 'auto' });
+    expect(client.compactSession).toHaveBeenCalledWith({ sessionId: 's1', instruction: '保留决策' });
+    expect(client.undoSession).toHaveBeenCalledWith({ sessionId: 's1', count: 1 });
+    expect(client.forkSession).toHaveBeenCalledWith({ sessionId: 's1', title: '派生任务' });
+    expect(client.restoreSession).toHaveBeenCalledWith({ sessionId: 's1' });
   });
 });

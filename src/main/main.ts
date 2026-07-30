@@ -15,7 +15,7 @@ import {
   WorkspaceRootRequestSchema,
 } from '../shared/contracts';
 import { discoverKimiCli, validateKimiCli } from './cli/cli-discovery';
-import { DesktopController } from './ipc';
+import { createSessionIpcHandlers, DesktopController } from './ipc';
 import { isTrustedNavigation } from './navigation-guard';
 import { createChildProcessFactory } from './server/child-process-factory';
 import { KimiDesktopClient } from './server/kimi-client';
@@ -92,6 +92,7 @@ function getAvailablePort(): Promise<number> {
 }
 
 function registerIpc(controller: DesktopController, client: KimiDesktopClient): void {
+  const sessionHandlers = createSessionIpcHandlers(client);
   ipcMain.handle('desktop:status', () => controller.status());
   ipcMain.handle('desktop:refresh-cli', () => controller.refreshCli());
   ipcMain.handle('desktop:start-server', () => controller.startServer());
@@ -109,6 +110,13 @@ function registerIpc(controller: DesktopController, client: KimiDesktopClient): 
     return client.createWorkspace(request.root);
   });
   ipcMain.handle('desktop:list-sessions', () => client.listSessions());
+  ipcMain.handle('desktop:list-archived-sessions', () => sessionHandlers.listArchived());
+  ipcMain.handle('desktop:get-session-runtime', (_event, sessionId: unknown) => sessionHandlers.getRuntime(sessionId));
+  ipcMain.handle('desktop:update-session-runtime', (_event, input: unknown) => sessionHandlers.updateRuntime(input));
+  ipcMain.handle('desktop:compact-session', (_event, input: unknown) => sessionHandlers.compact(input));
+  ipcMain.handle('desktop:undo-session', (_event, input: unknown) => sessionHandlers.undo(input));
+  ipcMain.handle('desktop:fork-session', (_event, input: unknown) => sessionHandlers.fork(input));
+  ipcMain.handle('desktop:restore-session', (_event, input: unknown) => sessionHandlers.restore(input));
   ipcMain.handle('desktop:list-models', () => client.listModels());
   ipcMain.handle('desktop:rename-session', (_event, input: unknown) => {
     const request = RenameSessionRequestSchema.parse(input);
