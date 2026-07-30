@@ -4,6 +4,20 @@ import type { CliDiscovery, ServerStatus } from '../../shared/contracts';
 import type { LiveTaskSocket } from './live-task-feed';
 import { parseStartupAccess, redactStartupLine } from './startup-output';
 
+
+export class LocalServiceRequestError extends Error {
+  readonly name = 'LocalServiceRequestError';
+
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: number,
+    readonly details?: unknown,
+  ) {
+    super(message);
+  }
+}
+
 export interface ManagedChild {
   readonly stdout: EventEmitter;
   readonly stderr: EventEmitter;
@@ -69,11 +83,23 @@ export class KimiServerLifecycle {
     try {
       body = await response.json();
     } catch {
-      throw new Error('Kimi Code local service returned an invalid response.');
+      if (!response.ok) {
+        throw new LocalServiceRequestError('Kimi Code 本地服务返回了无效响应。', response.status);
+      }
+      throw new Error('Kimi Code 本地服务返回了无效响应。');
     }
 
-    if (!response.ok || !isSuccessEnvelope(body)) {
-      throw new Error('Kimi Code local service request failed.');
+    if (!response.ok) {
+      const error = asErrorEnvelope(body);
+      throw new LocalServiceRequestError(
+        error?.message ?? 'Kimi Code 本地服务请求失败。',
+        response.status,
+        error?.code,
+        error?.details,
+      );
+    }
+    if (!isSuccessEnvelope(body)) {
+      throw new Error('Kimi Code 本地服务返回了不支持的响应。');
     }
     return body.data;
   }
@@ -160,4 +186,15 @@ export class KimiServerLifecycle {
 
 function isSuccessEnvelope(value: unknown): value is { code: 0; data: unknown } {
   return typeof value === 'object' && value !== null && 'code' in value && (value as { code?: unknown }).code === 0 && 'data' in value;
+}
+
+
+function asErrorEnvelope(value: unknown): { code?: number; message?: string; details?: unknown } | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  return {
+    code: typeof record.code === 'number' ? record.code : undefined,
+    message: typeof record.msg === 'string' ? record.msg : undefined,
+    details: record.details,
+  };
 }

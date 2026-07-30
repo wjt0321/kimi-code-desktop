@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { KimiServerLifecycle, type ChildProcessFactory, type ManagedChild } from './server-lifecycle';
+import { KimiServerLifecycle, LocalServiceRequestError, type ChildProcessFactory, type ManagedChild } from './server-lifecycle';
 
 function fakeChild(): ManagedChild & { readonly args: readonly string[]; emitExit(code: number): void; emitError(): void } {
   const events = new EventEmitter();
@@ -62,6 +62,41 @@ describe('KimiServerLifecycle', () => {
       expect.objectContaining({ headers: { Authorization: 'Bearer fixture-token' } }),
     );
   });
+
+  it('preserves HTTP status and service error details for failed requests', async () => {
+    const child = fakeChild();
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({ code: 40401, msg: 'route not found', details: { path: '/sessions/s1/status' } }),
+    })));
+    const lifecycle = new KimiServerLifecycle({ childFactory: { spawn: () => child }, portProvider: async () => 59123 });
+    await lifecycle.start({ kind: 'ready', command: 'C:\\tools\\kimi.cmd', version: '0.30.0' });
+    child.stdout.emit('data', Buffer.from('Open http://127.0.0.1:59123/#token=fixture-token\n'));
+
+    await expect(lifecycle.request('/sessions/s1/status')).rejects.toEqual(
+      new LocalServiceRequestError('route not found', 404, 40401, { path: '/sessions/s1/status' }),
+    );
+  });
+
+  it('preserves HTTP status when a failed response is not JSON', async () => {
+    const child = fakeChild();
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 502,
+      json: async () => { throw new SyntaxError('invalid json'); },
+    })));
+    const lifecycle = new KimiServerLifecycle({ childFactory: { spawn: () => child }, portProvider: async () => 59123 });
+    await lifecycle.start({ kind: 'ready', command: 'C:\\tools\\kimi.cmd', version: '0.30.0' });
+    child.stdout.emit('data', Buffer.from('Open http://127.0.0.1:59123/#token=fixture-token\n'));
+
+    await expect(lifecycle.request('/sessions')).rejects.toMatchObject({
+      name: 'LocalServiceRequestError',
+      status: 502,
+      message: 'Kimi Code 本地服务返回了无效响应。',
+    });
+  });
+
   it('stops an owned process when startup fails', async () => {
     const child = fakeChild();
     const lifecycle = new KimiServerLifecycle({ childFactory: { spawn: () => child }, portProvider: async () => 59123 });
