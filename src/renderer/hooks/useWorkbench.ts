@@ -25,6 +25,7 @@ export function useWorkbench(connected: boolean) {
   const [composerDraft, setComposerDraft] = useState<{ revision: number; text: string }>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const [pendingApprovalIds, setPendingApprovalIds] = useState<string[]>([]);
   const selectedSessionIdRef = useRef(selectedSessionId);
   const snapshotRevision = useRef(0);
   selectedSessionIdRef.current = selectedSessionId;
@@ -162,12 +163,17 @@ export function useWorkbench(connected: boolean) {
     }
   }, [refreshOverview, refreshSnapshot]);
 
-  const respondApproval = useCallback(async (input: ApprovalDecisionRequest) => {
+  const respondApproval = useCallback(async (input: ApprovalDecisionRequest): Promise<boolean> => {
+    setPendingApprovalIds((current) => current.includes(input.approvalId) ? current : [...current, input.approvalId]);
     try {
       await window.desktop.respondApproval(input);
       await Promise.all([refreshOverview(), refreshSnapshot(input.sessionId)]);
+      return true;
     } catch {
       setError('无法提交审批决定。');
+      return false;
+    } finally {
+      setPendingApprovalIds((current) => current.filter((approvalId) => approvalId !== input.approvalId));
     }
   }, [refreshOverview, refreshSnapshot]);
 
@@ -384,6 +390,7 @@ export function useWorkbench(connected: boolean) {
     composerDraft,
     loading,
     error: error ?? runtimeError,
+    pendingApprovalIds,
     actions: {
       refreshOverview,
       selectWorkspace,

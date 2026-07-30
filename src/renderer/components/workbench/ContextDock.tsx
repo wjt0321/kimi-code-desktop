@@ -1,4 +1,4 @@
-import { AlertTriangle, BrainCircuit, Check, CircleHelp, Gauge, LoaderCircle, RefreshCw, Route, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, BrainCircuit, ChevronRight, CircleHelp, Gauge, LoaderCircle, RefreshCw, Route, ShieldAlert, X } from 'lucide-react';
 import { useState } from 'react';
 
 import type { DesktopQuestion, DesktopSessionRuntime, DesktopTaskSnapshot } from '../../../shared/contracts';
@@ -8,14 +8,12 @@ interface ContextDockProps {
   runtime: DesktopSessionRuntime | undefined;
   runtimeLoading: boolean;
   onRefreshRuntime(): void;
-  onApprove(approvalId: string): void;
-  onReject(approvalId: string): void;
   onAnswer(questionId: string, answers: Record<string, { kind: 'single'; optionId: string } | { kind: 'multi'; optionIds: string[] } | { kind: 'other'; text: string } | { kind: 'skipped' }>): void;
   onDismiss(questionId: string): void;
   onClose?(): void;
 }
 
-export function ContextDock({ snapshot, runtime, runtimeLoading, onRefreshRuntime, onApprove, onReject, onAnswer, onDismiss, onClose }: ContextDockProps) {
+export function ContextDock({ snapshot, runtime, runtimeLoading, onRefreshRuntime, onAnswer, onDismiss, onClose }: ContextDockProps) {
   const attentionCount = snapshot.approvals.length + snapshot.questions.length;
 
   return (
@@ -25,15 +23,11 @@ export function ContextDock({ snapshot, runtime, runtimeLoading, onRefreshRuntim
         <section className="context-section context-section--attention">
           <h2>需要处理（{attentionCount}）</h2>
           {snapshot.approvals.map((approval) => (
-            <article key={approval.id} className="approval-card">
-              <div className="approval-card__heading"><ShieldAlert size={15} /><strong>{approval.action}</strong></div>
-              <p>{approval.toolName}</p>
-              <pre>{approval.summary}</pre>
-              <div className="approval-card__actions">
-                <button type="button" className="button" onClick={() => onApprove(approval.id)}><Check size={14} />允许一次</button>
-                <button type="button" className="button button--secondary" onClick={() => onReject(approval.id)}>拒绝</button>
-              </div>
-            </article>
+            <button key={approval.id} type="button" className="context-approval-row" aria-label={`在执行记录中查看：${approval.action}`} onClick={() => focusApproval(approval.id)}>
+              <span className="context-approval-row__icon"><ShieldAlert size={14} /></span>
+              <span><strong>{approval.action}</strong><small>{approval.toolName}</small></span>
+              <ChevronRight size={13} />
+            </button>
           ))}
           {snapshot.questions.map((question) => <QuestionCard key={question.id} question={question} onAnswer={onAnswer} onDismiss={onDismiss} />)}
         </section>
@@ -147,4 +141,10 @@ function warningSeverityLabel(value: 'info' | 'warning' | 'error'): string {
   if (value === 'error') return '错误';
   if (value === 'warning') return '警告';
   return '提示';
+}
+
+function focusApproval(approvalId: string): void {
+  const target = document.getElementById(`approval-${approvalId}`);
+  target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  target?.focus({ preventScroll: true });
 }

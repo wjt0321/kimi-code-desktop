@@ -55,6 +55,7 @@ interface WorkbenchShellProps {
   composerDraft?: { revision: number; text: string };
   loading: boolean;
   error: string | undefined;
+  pendingApprovalIds: readonly string[];
   newTaskRequest?: number;
   sessionActionRequest?: { revision: number; action: SessionDialogAction };
   archivedRequest?: number;
@@ -72,8 +73,7 @@ interface WorkbenchShellProps {
   onCreateWorkspace(root: string): Promise<DesktopWorkspace | undefined>;
   onSendPrompt(text: string, modelId: string): Promise<void>;
   onAbort(): void;
-  onApprove(approvalId: string): void;
-  onReject(approvalId: string): void;
+  onApprovalDecision(approvalId: string, decision: 'approved' | 'rejected', feedback?: string, selectedLabel?: string): Promise<boolean>;
   onAnswer(questionId: string, answers: Record<string, { kind: 'single'; optionId: string } | { kind: 'multi'; optionIds: string[] } | { kind: 'other'; text: string } | { kind: 'skipped' }>): void;
   onDismiss(questionId: string): void;
   onRenameTask?(sessionId: string, title: string): void;
@@ -103,6 +103,7 @@ export function WorkbenchShell({
   composerDraft,
   loading,
   error,
+  pendingApprovalIds,
   newTaskRequest,
   sessionActionRequest,
   archivedRequest,
@@ -120,8 +121,7 @@ export function WorkbenchShell({
   onCreateWorkspace,
   onSendPrompt,
   onAbort,
-  onApprove,
-  onReject,
+  onApprovalDecision,
   onAnswer,
   onDismiss,
   onRenameTask = () => undefined,
@@ -361,7 +361,7 @@ export function WorkbenchShell({
 
         {selectedSession ? (
           <div className="task-canvas">
-            <TaskTimeline snapshot={snapshot} loading={loading} onOpenDiff={(target) => { setSelectedDiff(target); setContextOpen(true); }} />
+            <TaskTimeline snapshot={snapshot} loading={loading} pendingApprovalIds={pendingApprovalIds} onApprovalDecision={onApprovalDecision} onOpenDiff={(target) => { setSelectedDiff(target); setContextOpen(true); }} />
             <TaskComposer disabled={!connected} busy={selectedSession.busy} models={models} selectedModelId={selectedModelId} runtime={runtime} runtimeUpdating={runtimeUpdating} draft={composerDraft} onDraftConsumed={onDraftConsumed} onModelChange={onSelectModel} onRuntimeChange={onRuntimeChange} onSubmit={onSendPrompt} />
           </div>
         ) : (
@@ -412,7 +412,7 @@ export function WorkbenchShell({
           onCopyDiff={(text) => { void window.desktop.copyText({ text }).catch(() => setReviewError('无法复制差异内容。')); }}
           onRevealPath={(path) => { void window.desktop.revealPath({ path }).catch(() => setReviewError('无法在资源管理器中显示该文件。')); }}
         />
-      ) : contextOpen && snapshot && canShowContext ? <ContextDock snapshot={snapshot} runtime={runtime} runtimeLoading={runtimeLoading} onRefreshRuntime={onRefreshRuntime} onApprove={onApprove} onReject={onReject} onAnswer={onAnswer} onDismiss={onDismiss} onClose={() => setContextOpen(false)} /> : null}
+      ) : contextOpen && snapshot && canShowContext ? <ContextDock snapshot={snapshot} runtime={runtime} runtimeLoading={runtimeLoading} onRefreshRuntime={onRefreshRuntime} onAnswer={onAnswer} onDismiss={onDismiss} onClose={() => setContextOpen(false)} /> : null}
     </main>
   );
 }

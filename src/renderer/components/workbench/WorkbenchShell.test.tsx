@@ -57,8 +57,7 @@ const actions = {
   onCreateWorkspace: vi.fn(),
   onSendPrompt: vi.fn(),
   onAbort: vi.fn(),
-  onApprove: vi.fn(),
-  onReject: vi.fn(),
+  onApprovalDecision: vi.fn().mockResolvedValue(true),
   onAnswer: vi.fn(),
   onDismiss: vi.fn(),
   onRuntimeChange: vi.fn(),
@@ -90,6 +89,7 @@ describe('WorkbenchShell', () => {
         runtimeUpdating={false}
         loading={false}
         error={undefined}
+        pendingApprovalIds={[]}
         {...actions}
       />,
     );
@@ -125,6 +125,7 @@ describe('WorkbenchShell', () => {
         runtimeUpdating={false}
         loading={false}
         error={undefined}
+        pendingApprovalIds={[]}
         {...actions}
         onChooseWorkspaceFolder={chooseFolder}
         onCreateWorkspace={createWorkspace}
@@ -155,6 +156,7 @@ describe('WorkbenchShell', () => {
         runtimeUpdating={false}
         loading={false}
         error={undefined}
+        pendingApprovalIds={[]}
         {...actions}
         onRenameTask={vi.fn()}
         onArchiveTask={vi.fn()}
@@ -219,6 +221,7 @@ describe('WorkbenchShell', () => {
         runtimeUpdating={false}
         loading={false}
         error={undefined}
+        pendingApprovalIds={[]}
         {...actions}
       />,
     );

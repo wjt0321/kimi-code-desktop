@@ -43,6 +43,7 @@ const desktopApi = {
   undoSession: vi.fn(),
   forkSession: vi.fn(),
   restoreSession: vi.fn(),
+  respondApproval: vi.fn(),
 };
 
 let taskListener: ((event: { sessionId: string; kind: 'refresh'; seq?: number }) => void) | undefined;
@@ -85,6 +86,7 @@ beforeEach(() => {
   }));
   desktopApi.compactSession.mockResolvedValue(undefined);
   desktopApi.undoSession.mockResolvedValue(undefined);
+  desktopApi.respondApproval.mockResolvedValue(undefined);
   desktopApi.onTaskEvent.mockImplementation((listener) => {
     taskListener = listener;
     return () => { taskListener = undefined; };
@@ -173,6 +175,27 @@ describe('useWorkbench', () => {
     expect(result.current.archivedSessions).toEqual([archived]);
     await act(async () => { await result.current.actions.restoreTask('archived-1'); });
     expect(desktopApi.restoreSession).toHaveBeenCalledWith({ sessionId: 'archived-1' });
+  });
+
+
+  it('tracks pending approval decisions and reports whether submission succeeded', async () => {
+    let resolveDecision!: () => void;
+    desktopApi.respondApproval.mockImplementation(() => new Promise<void>((resolve) => { resolveDecision = resolve; }));
+    const { result } = renderHook(() => useWorkbench(true));
+    await waitFor(() => expect(result.current.selectedSession?.id).toBe('session-1'));
+
+    let decision!: Promise<boolean>;
+    act(() => { decision = result.current.actions.respondApproval({ sessionId: 'session-1', approvalId: 'approval-1', decision: 'approved', feedback: '已检查' }); });
+    expect(result.current.pendingApprovalIds).toEqual(['approval-1']);
+    expect(desktopApi.respondApproval).toHaveBeenCalledWith({ sessionId: 'session-1', approvalId: 'approval-1', decision: 'approved', feedback: '已检查' });
+
+    await act(async () => { resolveDecision(); expect(await decision).toBe(true); });
+    expect(result.current.pendingApprovalIds).toEqual([]);
+
+    desktopApi.respondApproval.mockRejectedValueOnce(new Error('failed'));
+    await act(async () => { expect(await result.current.actions.respondApproval({ sessionId: 'session-1', approvalId: 'approval-2', decision: 'rejected' })).toBe(false); });
+    expect(result.current.pendingApprovalIds).toEqual([]);
+    expect(result.current.error).toBe('无法提交审批决定。');
   });
 
   it('does not run structural actions while the selected task is busy', async () => {

@@ -63,6 +63,7 @@ export function App() {
         composerDraft={workbench.composerDraft}
         loading={workbench.loading}
         error={workbench.error}
+        pendingApprovalIds={workbench.pendingApprovalIds}
         newTaskRequest={newTaskRequest}
         sessionActionRequest={sessionActionRequest}
         archivedRequest={archivedRequest}
@@ -80,8 +81,7 @@ export function App() {
         onCreateWorkspace={workbench.actions.createWorkspace}
         onSendPrompt={workbench.actions.sendPrompt}
         onAbort={() => void workbench.actions.abort()}
-        onApprove={(approvalId) => selectedSessionId && void workbench.actions.respondApproval({ sessionId: selectedSessionId, approvalId, decision: 'approved' })}
-        onReject={(approvalId) => selectedSessionId && void workbench.actions.respondApproval({ sessionId: selectedSessionId, approvalId, decision: 'rejected' })}
+        onApprovalDecision={(approvalId, decision, feedback, selectedLabel) => selectedSessionId ? workbench.actions.respondApproval({ sessionId: selectedSessionId, approvalId, decision, feedback, selectedLabel }) : Promise.resolve(false)}
         onAnswer={(questionId, answers) => selectedSessionId && void workbench.actions.respondQuestion({ sessionId: selectedSessionId, questionId, answers })}
         onDismiss={(questionId) => selectedSessionId && void workbench.actions.dismissQuestion({ sessionId: selectedSessionId, questionId })}
         onRenameTask={(sessionId, title) => void workbench.actions.renameTask(sessionId, title)}

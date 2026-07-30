@@ -1,7 +1,8 @@
 import { Bot, Brain, ChevronRight, CircleAlert, LoaderCircle, User } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 
-import type { DesktopDiffTarget, DesktopTaskSnapshot, DesktopTimelineEntry } from '../../../shared/contracts';
+import type { DesktopApproval, DesktopDiffTarget, DesktopTaskSnapshot, DesktopTimelineEntry } from '../../../shared/contracts';
+import { InlineApprovalCard } from './InlineApprovalCard';
 import { RichText } from './RichText';
 import { ToolCallCard } from './ToolCallCard';
 
@@ -10,11 +11,13 @@ interface TaskTimelineProps {
   loading: boolean;
   onOpenDiff?(target: DesktopDiffTarget): void;
   onOpenTask?(taskId: string): void;
+  pendingApprovalIds?: readonly string[];
+  onApprovalDecision?(approvalId: string, decision: 'approved' | 'rejected', feedback?: string, selectedLabel?: string): Promise<boolean> | boolean;
 }
 
-export function TaskTimeline({ snapshot, loading, onOpenDiff = () => undefined, onOpenTask = () => undefined }: TaskTimelineProps) {
+export function TaskTimeline({ snapshot, loading, onOpenDiff = () => undefined, onOpenTask = () => undefined, pendingApprovalIds = [], onApprovalDecision = () => false }: TaskTimelineProps) {
   const endRef = useRef<HTMLDivElement>(null);
-  const entryCount = snapshot?.timeline.length ?? 0;
+  const entryCount = (snapshot?.timeline.length ?? 0) + (snapshot?.approvals.length ?? 0);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
@@ -34,13 +37,49 @@ export function TaskTimeline({ snapshot, loading, onOpenDiff = () => undefined, 
   return (
     <div className="task-timeline" aria-live="polite">
       <div className="task-timeline__inner">
-        {snapshot.timeline.map((entry) => <TimelineEntry key={entry.id} entry={entry} onOpenDiff={onOpenDiff} onOpenTask={onOpenTask} />)}
+        <TimelineWithApprovals snapshot={snapshot} pendingApprovalIds={pendingApprovalIds} onOpenDiff={onOpenDiff} onOpenTask={onOpenTask} onApprovalDecision={onApprovalDecision} />
         {snapshot.status.phase === 'running' || snapshot.status.phase === 'streaming' || snapshot.status.phase === 'tool' ? (
           <div className="timeline-running"><LoaderCircle size={14} /><span>{runningLabel(snapshot.status.phase)}</span></div>
         ) : null}
         <div ref={endRef} />
       </div>
     </div>
+  );
+}
+
+
+function TimelineWithApprovals({ snapshot, pendingApprovalIds, onOpenDiff, onOpenTask, onApprovalDecision }: {
+  snapshot: DesktopTaskSnapshot;
+  pendingApprovalIds: readonly string[];
+  onOpenDiff(target: DesktopDiffTarget): void;
+  onOpenTask(taskId: string): void;
+  onApprovalDecision(approvalId: string, decision: 'approved' | 'rejected', feedback?: string, selectedLabel?: string): Promise<boolean> | boolean;
+}) {
+  const anchored = new Set<string>();
+  const pending = new Set(pendingApprovalIds);
+  const approvalsFor = (entry: DesktopTimelineEntry): DesktopApproval[] => {
+    if (entry.kind !== 'tool') return [];
+    return snapshot.approvals.filter((approval) => {
+      const matches = approval.toolCallId !== undefined && approval.toolCallId === entry.toolCallId
+        || entry.approvalId !== undefined && approval.id === entry.approvalId;
+      if (matches) anchored.add(approval.id);
+      return matches;
+    });
+  };
+
+  return (
+    <>
+      {snapshot.timeline.map((entry) => {
+        const approvals = approvalsFor(entry);
+        return (
+          <Fragment key={entry.id}>
+            <TimelineEntry entry={entry} onOpenDiff={onOpenDiff} onOpenTask={onOpenTask} />
+            {approvals.map((approval) => <InlineApprovalCard key={approval.id} approval={approval} pending={pending.has(approval.id)} onDecision={(decision, feedback, selectedLabel) => onApprovalDecision(approval.id, decision, feedback, selectedLabel)} />)}
+          </Fragment>
+        );
+      })}
+      {snapshot.approvals.filter((approval) => !anchored.has(approval.id)).map((approval) => <InlineApprovalCard key={approval.id} approval={approval} pending={pending.has(approval.id)} onDecision={(decision, feedback, selectedLabel) => onApprovalDecision(approval.id, decision, feedback, selectedLabel)} />)}
+    </>
   );
 }
 

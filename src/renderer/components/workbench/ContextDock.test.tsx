@@ -32,25 +32,22 @@ const runtime: DesktopSessionRuntime = {
 afterEach(cleanup);
 
 describe('ContextDock', () => {
-  it('puts pending approval first and sends an explicit decision', async () => {
+  it('puts a compact pending approval shortcut first', async () => {
     const user = userEvent.setup();
-    const onApprove = vi.fn();
     render(
       <ContextDock
         snapshot={snapshot}
         runtime={runtime}
         runtimeLoading={false}
         onRefreshRuntime={vi.fn()}
-        onApprove={onApprove}
-        onReject={vi.fn()}
         onAnswer={vi.fn()}
         onDismiss={vi.fn()}
       />,
     );
 
     expect(screen.getByRole('heading', { name: '需要处理（1）' })).not.toBeNull();
-    await user.click(screen.getByRole('button', { name: '允许一次' }));
-    expect(onApprove).toHaveBeenCalledWith('approval-1');
+    expect(screen.queryByRole('button', { name: '允许一次' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: '在执行记录中查看：运行构建' }));
   });
 
   it('renders confirmed runtime details, warnings, and refresh action', async () => {
@@ -62,8 +59,6 @@ describe('ContextDock', () => {
         runtime={runtime}
         runtimeLoading={false}
         onRefreshRuntime={onRefreshRuntime}
-        onApprove={vi.fn()}
-        onReject={vi.fn()}
         onAnswer={vi.fn()}
         onDismiss={vi.fn()}
       />,
