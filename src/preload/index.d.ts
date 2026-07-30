@@ -3,6 +3,7 @@ import type {
   CompactSessionRequest,
   CopyTextRequest,
   CreateTaskRequest,
+  DesktopCapabilitySnapshot,
   DesktopMessage,
   DesktopModel,
   DesktopSession,
@@ -26,6 +27,8 @@ import type {
 
 export interface DesktopApi {
   status(): Promise<DesktopStatus>;
+  capabilities(): Promise<DesktopCapabilitySnapshot>;
+  refreshCapabilities(): Promise<DesktopCapabilitySnapshot>;
   refreshCli(): Promise<DesktopStatus>;
   chooseCliExecutable(): Promise<DesktopStatus>;
   startServer(): Promise<DesktopStatus>;
@@ -59,6 +62,7 @@ export interface DesktopApi {
   respondQuestion(input: QuestionResponseRequest): Promise<void>;
   dismissQuestion(input: QuestionDismissRequest): Promise<void>;
   onStatus(listener: (status: DesktopStatus) => void): () => void;
+  onCapabilities(listener: (snapshot: DesktopCapabilitySnapshot) => void): () => void;
   onTaskEvent(listener: (event: DesktopTaskEvent) => void): () => void;
 }
 

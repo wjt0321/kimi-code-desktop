@@ -9,6 +9,7 @@ import {
   UpdateRuntimeRequestSchema,
   type CliDiscovery,
   type CompactSessionRequest,
+  type DesktopCapabilitySnapshot,
   type DesktopSession,
   type DesktopSessionRuntime,
   type DesktopStatus,
@@ -33,11 +34,20 @@ export interface LiveTaskFeedPort {
   onRefresh(listener: (event: DesktopTaskEvent) => void): () => void;
 }
 
+
+export interface CapabilityServicePort {
+  snapshot(): DesktopCapabilitySnapshot;
+  refresh(cliVersion: string, force?: boolean): Promise<DesktopCapabilitySnapshot>;
+  reset(cliVersion?: string): DesktopCapabilitySnapshot;
+  onSnapshot(listener: (snapshot: DesktopCapabilitySnapshot) => void): () => void;
+}
+
 export interface DesktopControllerOptions {
   readonly discover: () => Promise<CliDiscovery>;
   readonly validate: (command: string) => Promise<CliDiscovery>;
   readonly lifecycle: ServerLifecyclePort;
   readonly feed: LiveTaskFeedPort;
+  readonly capabilities: CapabilityServicePort;
 }
 
 export class DesktopController {
@@ -48,6 +58,7 @@ export class DesktopController {
   constructor(private readonly options: DesktopControllerOptions) {
     this.options.lifecycle.onStatus((status) => {
       if (status.kind !== 'connected') this.options.feed.unwatch();
+      this.#syncCapabilities(status);
       this.#emit();
     });
     this.options.feed.onRefresh((event) => {
@@ -64,16 +75,33 @@ export class DesktopController {
     return () => this.#listeners.delete(listener);
   }
 
+  capabilitySnapshot(): DesktopCapabilitySnapshot {
+    return this.options.capabilities.snapshot();
+  }
+
+  onCapabilities(listener: (snapshot: DesktopCapabilitySnapshot) => void): () => void {
+    return this.options.capabilities.onSnapshot(listener);
+  }
+
+  async refreshCapabilities(): Promise<DesktopCapabilitySnapshot> {
+    if (this.#cli.kind !== 'ready' || this.options.lifecycle.snapshot().kind !== 'connected') {
+      return this.options.capabilities.reset(this.#cli.kind === 'ready' ? this.#cli.version : undefined);
+    }
+    return this.options.capabilities.refresh(this.#cli.version, true);
+  }
+
   async refreshCli(): Promise<DesktopStatus> {
     this.#cli = { kind: 'checking' };
     this.#emit();
     this.#cli = await this.options.discover();
+    this.#syncCapabilities(this.options.lifecycle.snapshot());
     this.#emit();
     return this.status();
   }
 
   async chooseCliExecutable(command: string): Promise<DesktopStatus> {
     this.#cli = await this.options.validate(command);
+    this.#syncCapabilities(this.options.lifecycle.snapshot());
     this.#emit();
     return this.status();
   }
@@ -103,6 +131,14 @@ export class DesktopController {
   onTaskEvent(listener: (event: DesktopTaskEvent) => void): () => void {
     this.#taskListeners.add(listener);
     return () => this.#taskListeners.delete(listener);
+  }
+
+  #syncCapabilities(status: ServerStatus): void {
+    if (status.kind === 'connected' && this.#cli.kind === 'ready') {
+      void this.options.capabilities.refresh(this.#cli.version).catch(() => undefined);
+      return;
+    }
+    this.options.capabilities.reset(this.#cli.kind === 'ready' ? this.#cli.version : undefined);
   }
 
   #emit(): void {

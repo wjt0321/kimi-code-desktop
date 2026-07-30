@@ -6,6 +6,7 @@ import {
   CompactSessionRequestSchema,
   CopyTextRequestSchema,
   CreateTaskRequestSchema,
+  DesktopCapabilitySnapshotSchema,
   DesktopMessageSchema,
   DesktopModelSchema,
   DesktopSessionRuntimeSchema,
@@ -26,6 +27,7 @@ import {
   UndoSessionRequestSchema,
   UpdateRuntimeRequestSchema,
   WorkspaceRootRequestSchema,
+  type DesktopCapabilitySnapshot,
   type DesktopMessage,
   type DesktopModel,
   type CompactSessionRequest,
@@ -47,6 +49,10 @@ import {
 
 function parseStatus(value: unknown): DesktopStatus {
   return DesktopStatusSchema.parse(value);
+}
+
+function parseCapabilities(value: unknown): DesktopCapabilitySnapshot {
+  return DesktopCapabilitySnapshotSchema.parse(value);
 }
 
 function parseSession(value: unknown): DesktopSession {
@@ -92,6 +98,13 @@ function subscribe(listener: (status: DesktopStatus) => void): () => void {
   return () => ipcRenderer.removeListener(eventName, handler);
 }
 
+function subscribeCapabilities(listener: (snapshot: DesktopCapabilitySnapshot) => void): () => void {
+  const eventName = 'desktop:capabilities-changed';
+  const handler = (_event: Electron.IpcRendererEvent, value: unknown) => listener(parseCapabilities(value));
+  ipcRenderer.on(eventName, handler);
+  return () => ipcRenderer.removeListener(eventName, handler);
+}
+
 function subscribeTask(listener: (event: DesktopTaskEvent) => void): () => void {
   const eventName = 'desktop:task-event';
   const handler = (_event: Electron.IpcRendererEvent, value: unknown) => listener(DesktopTaskEventSchema.parse(value));
@@ -108,6 +121,8 @@ function subscribeCloseRequested(listener: () => void): () => void {
 
 contextBridge.exposeInMainWorld('desktop', {
   status: () => ipcRenderer.invoke('desktop:status').then(parseStatus),
+  capabilities: () => ipcRenderer.invoke('desktop:capabilities').then(parseCapabilities),
+  refreshCapabilities: () => ipcRenderer.invoke('desktop:refresh-capabilities').then(parseCapabilities),
   refreshCli: () => ipcRenderer.invoke('desktop:refresh-cli').then(parseStatus),
   chooseCliExecutable: () => ipcRenderer.invoke('desktop:choose-cli-executable').then(parseStatus),
   startServer: () => ipcRenderer.invoke('desktop:start-server').then(parseStatus),
@@ -143,5 +158,6 @@ contextBridge.exposeInMainWorld('desktop', {
   respondQuestion: (input: unknown) => ipcRenderer.invoke('desktop:respond-question', QuestionResponseRequestSchema.parse(input)),
   dismissQuestion: (input: unknown) => ipcRenderer.invoke('desktop:dismiss-question', QuestionDismissRequestSchema.parse(input)),
   onStatus: subscribe,
+  onCapabilities: subscribeCapabilities,
   onTaskEvent: subscribeTask,
 });

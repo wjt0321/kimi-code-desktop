@@ -1,7 +1,53 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { CliDiscovery, ServerStatus } from '../shared/contracts';
+import type { CliDiscovery, DesktopCapabilitySnapshot, ServerStatus } from '../shared/contracts';
 import { createReviewIpcHandlers, createSessionIpcHandlers, DesktopController } from './ipc';
+
+
+const idleCapabilities: DesktopCapabilitySnapshot = {
+  phase: 'idle',
+  desktopVersion: '0.5.0',
+  compatibilityMode: false,
+  capabilities: {
+    sessionRuntime: 'unknown',
+    sessionWarnings: 'unknown',
+    transcript: 'unknown',
+    config: 'unknown',
+    secondaryModel: 'unknown',
+    managedUserInfo: 'unknown',
+    promptProfile: 'unknown',
+    nonBlockingTaskOutput: 'unknown',
+  },
+};
+
+const readyCapabilities: DesktopCapabilitySnapshot = {
+  ...idleCapabilities,
+  phase: 'ready',
+  cliVersion: '0.30.0',
+  compatibilityMode: true,
+};
+
+function fakeCapabilities() {
+  const listeners = new Set<(snapshot: DesktopCapabilitySnapshot) => void>();
+  let current = idleCapabilities;
+  return {
+    snapshot: () => current,
+    refresh: vi.fn(async () => {
+      current = readyCapabilities;
+      listeners.forEach((listener) => listener(current));
+      return current;
+    }),
+    reset: vi.fn((cliVersion?: string) => {
+      current = { ...idleCapabilities, cliVersion };
+      listeners.forEach((listener) => listener(current));
+      return current;
+    }),
+    onSnapshot: (listener: (snapshot: DesktopCapabilitySnapshot) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
 
 function readyCli(): CliDiscovery {
   return { kind: 'ready', command: 'C:\\tools\\kimi.cmd', version: '0.30.0' };
@@ -22,7 +68,7 @@ function fakeLifecycle(status: ServerStatus = { kind: 'idle' }) {
 describe('DesktopController', () => {
   it('rejects service start until discovery reports a ready CLI', async () => {
     const lifecycle = fakeLifecycle();
-    const controller = new DesktopController({ discover: async () => ({ kind: 'missing' }), validate: async () => ({ kind: 'missing' }), lifecycle, feed: fakeFeed() });
+    const controller = new DesktopController({ discover: async () => ({ kind: 'missing' }), validate: async () => ({ kind: 'missing' }), lifecycle, feed: fakeFeed(), capabilities: fakeCapabilities() });
 
     await controller.refreshCli();
     await expect(controller.startServer()).rejects.toThrow('Kimi Code CLI is not ready');
@@ -30,11 +76,31 @@ describe('DesktopController', () => {
 
   it('uses a selected launcher only after validating it', async () => {
     const lifecycle = fakeLifecycle();
-    const controller = new DesktopController({ discover: async () => ({ kind: 'missing' }), validate: async () => readyCli(), lifecycle, feed: fakeFeed() });
+    const controller = new DesktopController({ discover: async () => ({ kind: 'missing' }), validate: async () => readyCli(), lifecycle, feed: fakeFeed(), capabilities: fakeCapabilities() });
 
     await controller.chooseCliExecutable('C:\\tools\\kimi.cmd');
 
     expect(controller.status()).toEqual({ cli: readyCli(), server: { kind: 'idle' } });
+  });
+
+  it('refreshes capabilities on connection and resets them when the service stops', async () => {
+    const lifecycle = fakeLifecycle();
+    const capabilities = fakeCapabilities();
+    const controller = new DesktopController({
+      discover: async () => readyCli(),
+      validate: async () => readyCli(),
+      lifecycle,
+      feed: fakeFeed(),
+      capabilities,
+    });
+    await controller.refreshCli();
+
+    lifecycle.setStatus({ kind: 'connected', origin: 'http://127.0.0.1:58627' });
+    await vi.waitFor(() => expect(capabilities.refresh).toHaveBeenCalledWith('0.30.0'));
+    lifecycle.setStatus({ kind: 'idle' });
+
+    expect(capabilities.reset).toHaveBeenLastCalledWith('0.30.0');
+    expect(controller.capabilitySnapshot().phase).toBe('idle');
   });
 });
 
@@ -53,7 +119,7 @@ describe('task watching', () => {
   it('starts a watched task only after the local service is connected', async () => {
     const lifecycle = fakeLifecycle();
     const feed = fakeFeed();
-    const controller = new DesktopController({ discover: async () => readyCli(), validate: async () => readyCli(), lifecycle, feed });
+    const controller = new DesktopController({ discover: async () => readyCli(), validate: async () => readyCli(), lifecycle, feed, capabilities: fakeCapabilities() });
 
     await expect(controller.watchTask('session-1', 'main')).rejects.toThrow('Kimi Code local service is not connected.');
     lifecycle.setStatus({ kind: 'connected', origin: 'http://127.0.0.1:58627' });

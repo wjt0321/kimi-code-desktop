@@ -19,6 +19,7 @@ import { discoverKimiCli, validateKimiCli } from './cli/cli-discovery';
 import { createReviewIpcHandlers, createSessionIpcHandlers, DesktopController } from './ipc';
 import { isTrustedNavigation } from './navigation-guard';
 import { createChildProcessFactory } from './server/child-process-factory';
+import { KimiCapabilityService } from './server/capability-service';
 import { KimiDesktopClient } from './server/kimi-client';
 import { LiveTaskFeed } from './server/live-task-feed';
 import { KimiServerLifecycle } from './server/server-lifecycle';
@@ -100,6 +101,8 @@ function registerIpc(controller: DesktopController, client: KimiDesktopClient): 
     copy: (text) => clipboard.writeText(text),
   });
   ipcMain.handle('desktop:status', () => controller.status());
+  ipcMain.handle('desktop:capabilities', () => controller.capabilitySnapshot());
+  ipcMain.handle('desktop:refresh-capabilities', () => controller.refreshCapabilities());
   ipcMain.handle('desktop:refresh-cli', () => controller.refreshCli());
   ipcMain.handle('desktop:start-server', () => controller.startServer());
   ipcMain.handle('desktop:stop-server', () => controller.stopServer());
@@ -166,18 +169,26 @@ function registerIpc(controller: DesktopController, client: KimiDesktopClient): 
   controller.onStatus((status) => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('desktop:status-changed', status);
   });
+  controller.onCapabilities((snapshot) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('desktop:capabilities-changed', snapshot);
+  });
 }
 
 app.whenReady().then(async () => {
   app.setAppUserModelId('io.github.wjt0321.kimi-code-desktop');
   Menu.setApplicationMenu(null);
   const lifecycle = new KimiServerLifecycle({ childFactory: createChildProcessFactory(), portProvider: getAvailablePort });
+  const capabilities = new KimiCapabilityService({
+    desktopVersion: app.getVersion(),
+    request: (path, init) => lifecycle.request(path, init),
+  });
   const feed = new LiveTaskFeed({ openSocket: () => lifecycle.openEventSocket() });
   const controller = new DesktopController({
     discover: discoverKimiCli,
     validate: validateKimiCli,
     lifecycle,
     feed,
+    capabilities,
   });
   registerIpc(controller, new KimiDesktopClient(lifecycle));
   controller.onTaskEvent((event) => {
