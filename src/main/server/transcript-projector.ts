@@ -1,6 +1,7 @@
 import {
   DesktopTaskSnapshotSchema,
   type DesktopApproval,
+  type DesktopApprovalBlock,
   type DesktopQuestion,
   type DesktopTask,
   type DesktopTaskSnapshot,
@@ -8,6 +9,8 @@ import {
   type DesktopTimelineEntry,
   type DesktopTodo,
 } from '../../shared/contracts';
+import { buildToolDiff } from './diff-projector';
+import { projectToolFrame } from './tool-projector';
 
 export function projectTranscript(
   value: unknown,
@@ -69,21 +72,10 @@ function readTimeline(items: unknown[]): DesktopTimelineEntry[] {
         }
 
         if (kind === 'tool') {
-          const name = readString(frameRecord.name);
-          const state = frameRecord.state;
-          if (!name || (state !== 'running' && state !== 'done' && state !== 'error')) continue;
-          const output = displayValue(frameRecord.output ?? frameRecord.error ?? frameRecord.progress);
-          timeline.push({
-            id: frameId,
-            kind: 'tool',
-            name,
-            state,
-            summary: toolSummary(name, state),
-            output,
-          });
+          const projected = projectToolFrame(frameRecord);
+          if (projected) timeline.push(projected);
           continue;
         }
-
         if (kind === 'notice') {
           const level = frameRecord.level;
           const text = readString(frameRecord.message);
@@ -145,24 +137,99 @@ function readApprovals(value: unknown): DesktopApproval[] {
   for (const item of asArray(root?.items)) {
     const record = asRecord(item);
     if (!record) continue;
-    const id = readString(record.approval_id);
-    const toolName = readString(record?.tool_name);
-    const action = readString(record?.action);
-    const createdAt = readString(record?.created_at);
+    const id = readString(record.approval_id) ?? readString(record.approvalId);
+    const toolName = readString(record.tool_name) ?? readString(record.toolName);
+    const action = readString(record.action);
+    const createdAt = readString(record.created_at) ?? readString(record.createdAt);
     if (!id || !toolName || action === undefined || !createdAt) continue;
     approvals.push({
       id,
       kind: 'approval',
       toolName,
       action,
-      summary: displayValue(record.tool_input_display) ?? action,
+      summary: approvalSummary(record.tool_input_display ?? record.toolInputDisplay, action),
       createdAt,
-      expiresAt: readString(record.expires_at),
+      expiresAt: readString(record.expires_at) ?? readString(record.expiresAt),
+      toolCallId: readString(record.tool_call_id) ?? readString(record.toolCallId),
+      agentId: readString(record.agent_id) ?? readString(record.agentId),
+      block: readApprovalBlock(record.tool_input_display ?? record.toolInputDisplay, action, id),
     });
   }
   return approvals;
 }
 
+function readApprovalBlock(value: unknown, fallbackSummary: string, id: string): DesktopApprovalBlock {
+  const record = asRecord(value);
+  const kind = readString(record?.kind);
+  if (kind === 'command') {
+    const command = readString(record?.command);
+    if (command) return { kind: 'shell', command, cwd: readString(record?.cwd), danger: readString(record?.description) };
+  }
+  if (kind === 'diff') {
+    const path = readString(record?.path);
+    const before = readString(record?.before);
+    const after = readString(record?.after);
+    if (path && before !== undefined && after !== undefined) {
+      const target = buildToolDiff('Edit', { path, old_string: before, new_string: after }, undefined, id);
+      if (target) return { kind: 'diff', path, diff: target.lines };
+    }
+  }
+  if (kind === 'file_io') {
+    const path = readString(record?.path);
+    const operation = readString(record?.operation);
+    if (path && operation === 'write' && readString(record?.content) !== undefined) {
+      return { kind: 'file', path, content: readString(record?.content) ?? '' };
+    }
+    if (path && operation) return { kind: 'fileop', op: operation, path, detail: readString(record?.detail) };
+  }
+  if (kind === 'url_fetch') {
+    const url = readString(record?.url);
+    if (url) return { kind: 'url', method: readString(record?.method), url };
+  }
+  if (kind === 'search') {
+    const query = readString(record?.query);
+    if (query) return { kind: 'search', query, scope: readString(record?.scope) };
+  }
+  if (kind === 'todo_list') {
+    const items = asArray(record?.items).flatMap((item) => {
+      const entry = asRecord(item);
+      const title = readString(entry?.title);
+      const status = readString(entry?.status);
+      return title && status ? [{ title, status }] : [];
+    });
+    if (items.length > 0) return { kind: 'todo', items };
+  }
+  if (kind === 'plan_review') {
+    const plan = readString(record?.plan);
+    if (plan) {
+      const options = asArray(record?.options).flatMap((option) => {
+        const entry = asRecord(option);
+        const label = readString(entry?.label);
+        return label ? [{ label, description: readString(entry?.description) }] : [];
+      });
+      return { kind: 'plan_review', plan, path: readString(record?.path), options: options.length > 0 ? options : undefined };
+    }
+  }
+  if (kind === 'agent_call' || kind === 'skill_call' || kind === 'task' || kind === 'task_stop' || kind === 'goal_start') {
+    const name = readString(record?.agent_name) ?? readString(record?.skill_name) ?? readString(record?.description) ?? readString(record?.objective) ?? kind;
+    return { kind: 'invocation', kind2: kind, name, description: readString(record?.prompt) ?? readString(record?.task_description) };
+  }
+  if (kind === 'generic') {
+    const summary = readString(record?.summary);
+    if (summary !== undefined) return { kind: 'generic', summary };
+  }
+  return { kind: 'generic', summary: fallbackSummary };
+}
+
+function approvalSummary(value: unknown, fallback: string): string {
+  const record = asRecord(value);
+  return readString(record?.description)
+    ?? readString(record?.summary)
+    ?? readString(record?.command)
+    ?? readString(record?.path)
+    ?? readString(record?.query)
+    ?? fallback;
+}
 function readQuestions(value: unknown): DesktopQuestion[] {
   const root = asRecord(value);
   const questions: DesktopQuestion[] = [];
@@ -282,20 +349,4 @@ function readNonNegativeInteger(value: unknown): number | undefined {
 
 function readPermission(value: unknown): DesktopTaskStatus['permission'] {
   return value === 'manual' || value === 'yolo' || value === 'auto' ? value : undefined;
-}
-
-function toolSummary(name: string, state: 'running' | 'done' | 'error'): string {
-  if (state === 'running') return `正在运行 ${name}`;
-  if (state === 'done') return `${name} 已完成`;
-  return `${name} 运行失败`;
-}
-
-function displayValue(value: unknown): string | undefined {
-  if (typeof value === 'string') return value;
-  if (value === undefined) return undefined;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return undefined;
-  }
 }
