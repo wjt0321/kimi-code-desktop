@@ -69,7 +69,7 @@ export function NewTaskDialog({ open, onOpenChange, workspaces, selectedWorkspac
             <Select.Root value={workspaceId} onValueChange={setWorkspaceId} disabled={submitting}>
               <Select.Trigger className="workspace-picker-trigger" aria-label="工作区">
                 <Folder size={15} />
-                <Select.Value placeholder="选择工作区">{selected ? <span><strong>{selected.name}</strong><small>{selected.root}</small></span> : undefined}</Select.Value>
+                <Select.Value placeholder="选择工作区">{selected ? <span className="workspace-picker-value"><strong>{selected.name}</strong><small>{selected.root}</small></span> : undefined}</Select.Value>
                 <Select.Icon><ChevronDown size={14} /></Select.Icon>
               </Select.Trigger>
               <Select.Portal>
@@ -77,7 +77,7 @@ export function NewTaskDialog({ open, onOpenChange, workspaces, selectedWorkspac
                   <Select.Viewport>
                     {workspaces.map((workspace) => (
                       <Select.Item key={workspace.id} value={workspace.id} className="workspace-picker-item" textValue={`${workspace.name} ${workspace.root}`}>
-                        <Select.ItemText><span><strong>{workspace.name}</strong><small>{workspace.root}</small></span></Select.ItemText>
+                        <Select.ItemText><span className="workspace-picker-value"><strong>{workspace.name}</strong><small>{workspace.root}</small></span></Select.ItemText>
                         <Select.ItemIndicator><Check size={14} /></Select.ItemIndicator>
                       </Select.Item>
                     ))}

@@ -235,3 +235,10 @@ html[data-theme='light']{
 html[data-theme='light'] .workspace-menu{box-shadow:0 18px 55px rgb(45 48 58/.18)}
 html[data-theme='light'] .workspace-task__actions{background:linear-gradient(90deg,transparent,var(--surface-secondary) 28%)}
 html[data-theme='light'] .workspace-task--active .workspace-task__actions{background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 10%,var(--surface-secondary)) 28%)}
+html[data-theme='light'] .composer-shell{background:linear-gradient(180deg,transparent,var(--surface-primary) 30%,var(--surface-primary) 100%)}
+html[data-theme='light'] .compatibility-card strong,html[data-theme='light'] .capability-row__copy strong{color:var(--text-primary)}
+html[data-theme='light'] .compatibility-card p,html[data-theme='light'] .capability-row__copy small{color:var(--text-secondary)}
+html[data-theme='light'] .compatibility-card,html[data-theme='light'] .capability-row{border-color:var(--border-subtle)}
+html[data-theme='light'] .compatibility-card__icon,html[data-theme='light'] .capability-row__icon{background:rgba(34,38,48,.035)}
+
+.workspace-picker-value{display:grid;min-width:0;gap:2px}.workspace-picker-value strong,.workspace-picker-value small{display:block}
