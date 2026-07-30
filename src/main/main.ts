@@ -190,7 +190,7 @@ app.whenReady().then(async () => {
     feed,
     capabilities,
   });
-  registerIpc(controller, new KimiDesktopClient(lifecycle));
+  registerIpc(controller, new KimiDesktopClient(lifecycle, capabilities));
   controller.onTaskEvent((event) => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('desktop:task-event', event);
   });

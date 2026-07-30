@@ -6,6 +6,8 @@ import {
   type ApprovalDecisionRequest,
   type CompactSessionRequest,
   type CreateTaskRequest,
+  type DesktopCapabilityKey,
+  type DesktopCapabilityState,
   type DesktopMessage,
   type DesktopModel,
   type DesktopSession,
@@ -26,12 +28,34 @@ interface ServerRequestPort {
   request(path: string, init?: RequestInit): Promise<unknown>;
 }
 
+interface CapabilityObserverPort {
+  observe(key: DesktopCapabilityKey, state: DesktopCapabilityState): void;
+}
+
 export class KimiDesktopClient {
-  constructor(private readonly server: ServerRequestPort) {}
+  constructor(
+    private readonly server: ServerRequestPort,
+    private readonly capabilities?: CapabilityObserverPort,
+  ) {}
 
   async request(path: string, init?: RequestInit): Promise<unknown> {
     return unwrapServerEnvelope(await this.server.request(path, init));
   }
+  private async requestCapability(
+    key: DesktopCapabilityKey,
+    path: string,
+    init?: RequestInit,
+  ): Promise<unknown> {
+    try {
+      const value = await this.request(path, init);
+      this.capabilities?.observe(key, 'supported');
+      return value;
+    } catch (error) {
+      if (isUnsupportedCapability(error)) this.capabilities?.observe(key, 'unsupported');
+      throw error;
+    }
+  }
+
   async listWorkspaces(): Promise<DesktopWorkspace[]> {
     const data = await this.request('/workspaces');
     return readItems(data).map(toDesktopWorkspace);
@@ -67,7 +91,7 @@ export class KimiDesktopClient {
     const encodedSessionId = encodeURIComponent(sessionId);
     let status: unknown;
     try {
-      status = await this.request(`/sessions/${encodedSessionId}/status`);
+      status = await this.requestCapability('sessionRuntime', `/sessions/${encodedSessionId}/status`);
     } catch (error) {
       if (isUnsupportedCapability(error)) return unsupportedSessionRuntime();
       throw error;
@@ -76,7 +100,7 @@ export class KimiDesktopClient {
     let warnings: unknown[] = [];
     try {
       const warningData = readRecord(
-        await this.request(`/sessions/${encodedSessionId}/warnings`),
+        await this.requestCapability('sessionWarnings', `/sessions/${encodedSessionId}/warnings`),
         '本地服务返回了无效会话警告',
       );
       warnings = Array.isArray(warningData.warnings) ? warningData.warnings : [];
@@ -173,7 +197,7 @@ export class KimiDesktopClient {
     const encodedSessionId = encodeURIComponent(sessionId);
     const [session, transcript, approvals, questions] = await Promise.all([
       this.getSession(sessionId),
-      this.request(`/sessions/${encodedSessionId}/transcript?agent_id=main`),
+      this.requestCapability('transcript', `/sessions/${encodedSessionId}/transcript?agent_id=main`),
       this.request(`/sessions/${encodedSessionId}/approvals?status=pending`),
       this.request(`/sessions/${encodedSessionId}/questions?status=pending`),
     ]);

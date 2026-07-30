@@ -346,6 +346,74 @@ describe('KimiDesktopClient runtime controls', () => {
     expect(request).toHaveBeenNthCalledWith(4, '/sessions/s%20%2F%201:restore', { method: 'POST' });
   });
 
+  it('reports runtime, warning, and transcript capability results from real requests', async () => {
+    const observe = vi.fn();
+    const request = vi.fn(async (path: string) => {
+      if (path === '/sessions/s1/status') return {
+        busy: false,
+        model: 'kimi-code/k3',
+        thinking_level: 'high',
+        permission: 'manual',
+        plan_mode: false,
+        swarm_mode: false,
+        context_tokens: 0,
+        max_context_tokens: 128000,
+        context_usage: 0,
+      };
+      if (path === '/sessions/s1/warnings') throw new LocalServiceRequestError('route not found', 404);
+      if (path === '/sessions/s1') return {
+        id: 's1',
+        title: '能力检测',
+        updated_at: '2026-07-30T00:00:00.000Z',
+        busy: false,
+        metadata: { cwd: 'C:\\repo' },
+        agent_config: { model: 'kimi-code/k3' },
+      };
+      if (path === '/sessions/s1/transcript?agent_id=main') return {
+        agent_id: 'main',
+        items: [],
+        tasks: [],
+        interactions: [],
+        attachments: [],
+        todos: [],
+        prompts: [],
+        meta: { agent: { phase: { kind: 'idle' } } },
+      };
+      if (path.endsWith('/approvals?status=pending') || path.endsWith('/questions?status=pending')) return { items: [] };
+      throw new Error(`unexpected path ${path}`);
+    });
+    const client = new KimiDesktopClient({ request }, { observe });
+
+    await client.getSessionRuntime('s1');
+    await client.getTaskSnapshot('s1');
+
+    expect(observe).toHaveBeenCalledWith('sessionRuntime', 'supported');
+    expect(observe).toHaveBeenCalledWith('sessionWarnings', 'unsupported');
+    expect(observe).toHaveBeenCalledWith('transcript', 'supported');
+  });
+
+  it('reports an unsupported transcript route before preserving the request failure', async () => {
+    const observe = vi.fn();
+    const client = new KimiDesktopClient({
+      request: vi.fn(async (path: string) => {
+        if (path.includes('/transcript')) throw new LocalServiceRequestError('route not found', 404);
+        return path === '/sessions/s1'
+          ? {
+              id: 's1',
+              title: '旧版任务',
+              updated_at: '2026-07-30T00:00:00.000Z',
+              busy: false,
+              metadata: { cwd: 'C:\\repo' },
+              agent_config: { model: '' },
+            }
+          : { items: [] };
+      }),
+    }, { observe });
+
+    await expect(client.getTaskSnapshot('s1')).rejects.toThrow('route not found');
+    expect(observe).toHaveBeenCalledWith('transcript', 'unsupported');
+  });
+
   it('degrades only unsupported runtime reads and preserves other failures', async () => {
     const unsupported = new KimiDesktopClient({
       request: vi.fn(async () => { throw new LocalServiceRequestError('route not found', 404); }),
