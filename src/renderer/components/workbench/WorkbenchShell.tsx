@@ -41,7 +41,7 @@ import { presentWorkbenchStatus } from './workbench-status';
 
 const fallbackCapabilities: DesktopCapabilitySnapshot = {
   phase: 'idle',
-  desktopVersion: '0.5.0',
+  desktopVersion: '—',
   compatibilityMode: false,
   capabilities: {
     sessionRuntime: 'unknown',
