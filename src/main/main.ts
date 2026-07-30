@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron';
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -15,7 +16,7 @@ import {
   WorkspaceRootRequestSchema,
 } from '../shared/contracts';
 import { discoverKimiCli, validateKimiCli } from './cli/cli-discovery';
-import { createSessionIpcHandlers, DesktopController } from './ipc';
+import { createReviewIpcHandlers, createSessionIpcHandlers, DesktopController } from './ipc';
 import { isTrustedNavigation } from './navigation-guard';
 import { createChildProcessFactory } from './server/child-process-factory';
 import { KimiDesktopClient } from './server/kimi-client';
@@ -93,6 +94,11 @@ function getAvailablePort(): Promise<number> {
 
 function registerIpc(controller: DesktopController, client: KimiDesktopClient): void {
   const sessionHandlers = createSessionIpcHandlers(client);
+  const reviewHandlers = createReviewIpcHandlers({
+    exists: existsSync,
+    reveal: (path) => shell.showItemInFolder(path),
+    copy: (text) => clipboard.writeText(text),
+  });
   ipcMain.handle('desktop:status', () => controller.status());
   ipcMain.handle('desktop:refresh-cli', () => controller.refreshCli());
   ipcMain.handle('desktop:start-server', () => controller.startServer());
@@ -117,6 +123,8 @@ function registerIpc(controller: DesktopController, client: KimiDesktopClient): 
   ipcMain.handle('desktop:undo-session', (_event, input: unknown) => sessionHandlers.undo(input));
   ipcMain.handle('desktop:fork-session', (_event, input: unknown) => sessionHandlers.fork(input));
   ipcMain.handle('desktop:restore-session', (_event, input: unknown) => sessionHandlers.restore(input));
+  ipcMain.handle('desktop:reveal-path', (_event, input: unknown) => reviewHandlers.reveal(input));
+  ipcMain.handle('desktop:copy-text', (_event, input: unknown) => reviewHandlers.copy(input));
   ipcMain.handle('desktop:list-models', () => client.listModels());
   ipcMain.handle('desktop:rename-session', (_event, input: unknown) => {
     const request = RenameSessionRequestSchema.parse(input);

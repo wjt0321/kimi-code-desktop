@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { CliDiscovery, ServerStatus } from '../shared/contracts';
-import { createSessionIpcHandlers, DesktopController } from './ipc';
+import { createReviewIpcHandlers, createSessionIpcHandlers, DesktopController } from './ipc';
 
 function readyCli(): CliDiscovery {
   return { kind: 'ready', command: 'C:\\tools\\kimi.cmd', version: '0.30.0' };
@@ -111,5 +111,34 @@ describe('session IPC handlers', () => {
     expect(client.undoSession).toHaveBeenCalledWith({ sessionId: 's1', count: 1 });
     expect(client.forkSession).toHaveBeenCalledWith({ sessionId: 's1', title: '派生任务' });
     expect(client.restoreSession).toHaveBeenCalledWith({ sessionId: 's1' });
+  });
+});
+describe('review IPC handlers', () => {
+  it('reveals an existing absolute path and copies bounded text', async () => {
+    const actions = {
+      exists: vi.fn(() => true),
+      reveal: vi.fn(),
+      copy: vi.fn(),
+    };
+    const handlers = createReviewIpcHandlers(actions);
+
+    await handlers.reveal({ path: 'D:\\repo\\src\\app.ts' });
+    await handlers.copy({ text: 'diff content' });
+
+    expect(actions.reveal).toHaveBeenCalledWith('D:\\repo\\src\\app.ts');
+    expect(actions.copy).toHaveBeenCalledWith('diff content');
+  });
+
+  it('rejects relative and missing paths before invoking Electron', async () => {
+    const actions = {
+      exists: vi.fn(() => false),
+      reveal: vi.fn(),
+      copy: vi.fn(),
+    };
+    const handlers = createReviewIpcHandlers(actions);
+
+    await expect(handlers.reveal({ path: 'src/app.ts' })).rejects.toThrow('必须提供绝对路径');
+    await expect(handlers.reveal({ path: 'D:\\missing.ts' })).rejects.toThrow('路径不存在');
+    expect(actions.reveal).not.toHaveBeenCalled();
   });
 });

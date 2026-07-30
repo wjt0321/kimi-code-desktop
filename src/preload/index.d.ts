@@ -1,6 +1,7 @@
 import type {
   ApprovalDecisionRequest,
   CompactSessionRequest,
+  CopyTextRequest,
   CreateTaskRequest,
   DesktopMessage,
   DesktopModel,
@@ -16,6 +17,7 @@ import type {
   QuestionResponseRequest,
   RenameSessionRequest,
   RestoreSessionRequest,
+  RevealPathRequest,
   TaskWatchRequest,
   UndoSessionRequest,
   UpdateRuntimeRequest,
@@ -41,6 +43,8 @@ export interface DesktopApi {
   undoSession(input: UndoSessionRequest): Promise<void>;
   forkSession(input: ForkSessionRequest): Promise<DesktopSession>;
   restoreSession(input: RestoreSessionRequest): Promise<DesktopSession>;
+  revealPath(input: RevealPathRequest): Promise<void>;
+  copyText(input: CopyTextRequest): Promise<void>;
   listModels(): Promise<DesktopModel[]>;
   renameSession(input: RenameSessionRequest): Promise<void>;
   archiveSession(sessionId: string): Promise<void>;

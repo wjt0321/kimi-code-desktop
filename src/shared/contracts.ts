@@ -409,3 +409,16 @@ export const QuestionDismissRequestSchema = z.object({
 });
 
 export type QuestionDismissRequest = z.infer<typeof QuestionDismissRequestSchema>;
+function isAbsoluteDesktopPath(value: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('/') || value.startsWith('\\\\');
+}
+
+export const RevealPathRequestSchema = z.object({
+  path: z.string().min(1).refine(isAbsoluteDesktopPath, '必须提供绝对路径'),
+});
+export type RevealPathRequest = z.infer<typeof RevealPathRequestSchema>;
+
+export const CopyTextRequestSchema = z.object({
+  text: z.string().max(200_000),
+});
+export type CopyTextRequest = z.infer<typeof CopyTextRequestSchema>;

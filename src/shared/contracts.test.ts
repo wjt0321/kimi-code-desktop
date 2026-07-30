@@ -8,7 +8,9 @@ import {
   DesktopSessionRuntimeSchema,
   DesktopTaskEventSchema,
   DesktopTaskSnapshotSchema,
+  CopyTextRequestSchema,
   RenameSessionRequestSchema,
+  RevealPathRequestSchema,
   UpdateRuntimeRequestSchema,
   WorkspaceRootRequestSchema,
 } from './contracts';
@@ -139,5 +141,16 @@ describe('rich execution contracts', () => {
     })).toThrow();
 
     expect(() => DesktopDiffLineSchema.parse({ type: 'add', text: 'line', oldNo: 0, newNo: -1 })).toThrow();
+  });
+});
+describe('review action contracts', () => {
+  it('accepts absolute Windows paths and bounded clipboard text', () => {
+    expect(RevealPathRequestSchema.parse({ path: 'D:\\repo\\src\\app.ts' })).toEqual({ path: 'D:\\repo\\src\\app.ts' });
+    expect(CopyTextRequestSchema.parse({ text: 'diff content' })).toEqual({ text: 'diff content' });
+  });
+
+  it('rejects relative paths and oversized clipboard values', () => {
+    expect(() => RevealPathRequestSchema.parse({ path: 'src/app.ts' })).toThrow('必须提供绝对路径');
+    expect(() => CopyTextRequestSchema.parse({ text: 'x'.repeat(200_001) })).toThrow();
   });
 });

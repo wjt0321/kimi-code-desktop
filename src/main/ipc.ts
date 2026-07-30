@@ -1,7 +1,9 @@
 import {
   CompactSessionRequestSchema,
+  CopyTextRequestSchema,
   ForkSessionRequestSchema,
   RestoreSessionRequestSchema,
+  RevealPathRequestSchema,
   SessionIdSchema,
   UndoSessionRequestSchema,
   UpdateRuntimeRequestSchema,
@@ -129,5 +131,24 @@ export function createSessionIpcHandlers(client: SessionIpcClientPort) {
     undo: async (input: unknown) => client.undoSession(UndoSessionRequestSchema.parse(input)),
     fork: async (input: unknown) => client.forkSession(ForkSessionRequestSchema.parse(input)),
     restore: async (input: unknown) => client.restoreSession(RestoreSessionRequestSchema.parse(input)),
+  };
+}
+export interface ReviewActionsPort {
+  exists(path: string): boolean;
+  reveal(path: string): void;
+  copy(text: string): void;
+}
+
+export function createReviewIpcHandlers(actions: ReviewActionsPort) {
+  return {
+    reveal: async (input: unknown): Promise<void> => {
+      const request = RevealPathRequestSchema.parse(input);
+      if (!actions.exists(request.path)) throw new Error('路径不存在，无法在资源管理器中显示。');
+      actions.reveal(request.path);
+    },
+    copy: async (input: unknown): Promise<void> => {
+      const request = CopyTextRequestSchema.parse(input);
+      actions.copy(request.text);
+    },
   };
 }
