@@ -9,9 +9,7 @@ import {
   Folder,
   FolderPlus,
   Gauge,
-  ListFilter,
   LoaderCircle,
-  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRight,
@@ -28,8 +26,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CreateTaskRequest, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace, UpdateRuntimeRequest } from '../../../shared/contracts';
 import kimiBanner from '../../assets/kimi-banner-dark.svg';
 import kimiIcon from '../../assets/kimi-icon.svg';
+import { ArchivedSessionsDialog } from './ArchivedSessionsDialog';
 import { ContextDock } from './ContextDock';
 import { NewTaskDialog } from './NewTaskDialog';
+import { SessionActionDialogs, type SessionDialogAction } from './SessionActionDialogs';
+import { SessionActionsMenu } from './SessionActionsMenu';
 import { SettingsDialog } from './SettingsDialog';
 import { filterSessions, formatSessionTime, sessionPresentation } from './session-presentation';
 import { TaskComposer } from './TaskComposer';
@@ -43,6 +44,8 @@ interface WorkbenchShellProps {
   selectedModelId: string | undefined;
   selectedWorkspaceId: string | undefined;
   sessions: DesktopSession[];
+  archivedSessions: DesktopSession[];
+  archivedLoading: boolean;
   selectedSession: DesktopSession | undefined;
   snapshot: DesktopTaskSnapshot | undefined;
   runtime: DesktopSessionRuntime | undefined;
@@ -71,6 +74,11 @@ interface WorkbenchShellProps {
   onDismiss(questionId: string): void;
   onRenameTask?(sessionId: string, title: string): void;
   onArchiveTask?(sessionId: string): void;
+  onLoadArchived(): void;
+  onRestoreTask(sessionId: string): Promise<boolean>;
+  onUndoTask(): Promise<boolean>;
+  onCompactTask(instruction?: string): Promise<boolean>;
+  onForkTask(title?: string): Promise<boolean>;
   onDismissError?(): void;
 }
 
@@ -81,6 +89,8 @@ export function WorkbenchShell({
   selectedModelId,
   selectedWorkspaceId,
   sessions,
+  archivedSessions,
+  archivedLoading,
   selectedSession,
   snapshot,
   runtime,
@@ -109,6 +119,11 @@ export function WorkbenchShell({
   onDismiss,
   onRenameTask = () => undefined,
   onArchiveTask = () => undefined,
+  onLoadArchived,
+  onRestoreTask,
+  onUndoTask,
+  onCompactTask,
+  onForkTask,
   onDismissError = () => undefined,
 }: WorkbenchShellProps) {
   const [contextOpen, setContextOpen] = useState(false);
@@ -121,6 +136,8 @@ export function WorkbenchShell({
   const [renamingSessionId, setRenamingSessionId] = useState<string>();
   const [renameValue, setRenameValue] = useState('');
   const [archiveTarget, setArchiveTarget] = useState<DesktopSession>();
+  const [sessionDialogAction, setSessionDialogAction] = useState<SessionDialogAction>();
+  const [archivedOpen, setArchivedOpen] = useState(false);
   const lastNewTaskRequest = useRef(newTaskRequest);
 
   const connected = status.server.kind === 'connected';
@@ -189,6 +206,10 @@ export function WorkbenchShell({
     setRenamingSessionId(undefined);
   };
 
+  const requestSessionAction = (action: SessionDialogAction) => {
+    window.setTimeout(() => setSessionDialogAction(action), 0);
+  };
+
   const confirmArchive = () => {
     if (archiveTarget) onArchiveTask(archiveTarget.id);
     setArchiveTarget(undefined);
@@ -238,7 +259,7 @@ export function WorkbenchShell({
         </div>
 
         <section className="session-section">
-          <header><div><span>任务</span><small>{filteredSessions.length}</small></div><ListFilter size={13} /></header>
+          <header><div><span>任务</span><small>{filteredSessions.length}</small></div><button type="button" className="session-section__archive" aria-label="查看已归档任务" title="查看已归档任务" onClick={() => setArchivedOpen(true)}><Archive size={13} /></button></header>
           <div className="session-list">
             {filteredSessions.map((session) => {
               const presentation = sessionPresentation(session);
@@ -308,7 +329,7 @@ export function WorkbenchShell({
           <div className="workbench-actions">
             {selectedSession?.busy ? <button type="button" className="toolbar-button toolbar-button--danger" onClick={onAbort}><Square size={13} />停止</button> : null}
             {canShowContext ? <button type="button" className={`toolbar-button ${attentionCount > 0 ? 'toolbar-button--attention' : ''}`} onClick={() => setContextOpen((value) => !value)}><PanelRight size={15} />{attentionCount > 0 ? `待处理 ${attentionCount}` : '详情'}</button> : null}
-            {selectedSession ? <button type="button" className="icon-button" aria-label="更多任务操作" title="更多任务操作" onClick={() => setArchiveTarget(selectedSession)}><MoreHorizontal size={17} /></button> : null}
+            {selectedSession ? <SessionActionsMenu busy={selectedSession.busy} onUndoRequest={() => requestSessionAction('undo')} onCompactRequest={() => requestSessionAction('compact')} onForkRequest={() => requestSessionAction('fork')} onRenameRequest={() => startRename(selectedSession)} onArchiveRequest={() => setArchiveTarget(selectedSession)} /> : null}
           </div>
         </header>
 
@@ -342,6 +363,10 @@ export function WorkbenchShell({
 
       <NewTaskDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onCreateTask={onCreateTask} onChooseFolder={onChooseWorkspaceFolder} onCreateWorkspace={onCreateWorkspace} />
       <SettingsDialog open={settingsOpen} status={status} onOpenChange={setSettingsOpen} />
+
+
+      <SessionActionDialogs action={sessionDialogAction} sessionTitle={selectedSession?.title ?? ''} onClose={() => setSessionDialogAction(undefined)} onUndo={onUndoTask} onCompact={onCompactTask} onFork={onForkTask} />
+      <ArchivedSessionsDialog open={archivedOpen} sessions={archivedSessions} loading={archivedLoading} onOpenChange={setArchivedOpen} onLoad={onLoadArchived} onRestore={onRestoreTask} />
 
       <Dialog.Root open={archiveTarget !== undefined} onOpenChange={(open) => { if (!open) setArchiveTarget(undefined); }}>
         <Dialog.Portal>

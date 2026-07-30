@@ -45,6 +45,8 @@ const runtime: DesktopSessionRuntime = {
 };
 
 const actions = {
+  archivedSessions: [],
+  archivedLoading: false,
   onStart: vi.fn(),
   onStop: vi.fn(),
   onSelectWorkspace: vi.fn(),
@@ -61,6 +63,11 @@ const actions = {
   onDismiss: vi.fn(),
   onRuntimeChange: vi.fn(),
   onDraftConsumed: vi.fn(),
+  onLoadArchived: vi.fn(),
+  onRestoreTask: vi.fn().mockResolvedValue(true),
+  onUndoTask: vi.fn().mockResolvedValue(true),
+  onCompactTask: vi.fn().mockResolvedValue(true),
+  onForkTask: vi.fn().mockResolvedValue(true),
 };
 
 afterEach(() => cleanup());
@@ -140,7 +147,7 @@ describe('WorkbenchShell', () => {
         selectedModelId={models[0].id}
         selectedWorkspaceId={workspace.id}
         sessions={[session]}
-        selectedSession={session}
+        selectedSession={{ ...session, busy: false }}
         snapshot={snapshot}
         runtime={runtime}
         runtimeLoading={false}
@@ -157,6 +164,12 @@ describe('WorkbenchShell', () => {
     expect(screen.getByRole('button', { name: '设置与关于' })).not.toBeNull();
     expect(screen.getByRole('button', { name: '重命名任务' })).not.toBeNull();
     expect(screen.getByRole('button', { name: '归档任务' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: '查看已归档任务' })).not.toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '更多任务操作' }));
+    await user.click(screen.getByRole('menuitem', { name: '压缩上下文' }));
+    expect(await screen.findByRole('dialog', { name: '压缩当前上下文' })).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: '取消' }));
 
     await user.type(screen.getByRole('searchbox', { name: '搜索任务' }), '不存在的任务');
     expect(screen.queryByRole('button', { name: /修复登录状态/ })).toBeNull();

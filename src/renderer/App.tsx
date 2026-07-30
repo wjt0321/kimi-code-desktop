@@ -51,6 +51,8 @@ export function App() {
         selectedModelId={workbench.activeModelId}
         selectedWorkspaceId={workbench.selectedWorkspaceId}
         sessions={workbench.sessions}
+        archivedSessions={workbench.archivedSessions}
+        archivedLoading={workbench.archivedLoading}
         selectedSession={workbench.selectedSession}
         snapshot={workbench.snapshot}
         runtime={workbench.runtime}
@@ -79,6 +81,11 @@ export function App() {
         onDismiss={(questionId) => selectedSessionId && void workbench.actions.dismissQuestion({ sessionId: selectedSessionId, questionId })}
         onRenameTask={(sessionId, title) => void workbench.actions.renameTask(sessionId, title)}
         onArchiveTask={(sessionId) => void workbench.actions.archiveTask(sessionId)}
+        onLoadArchived={() => void workbench.actions.loadArchivedSessions()}
+        onRestoreTask={workbench.actions.restoreTask}
+        onUndoTask={workbench.actions.undoTask}
+        onCompactTask={workbench.actions.compactTask}
+        onForkTask={workbench.actions.forkTask}
         onDismissError={workbench.actions.clearError}
       />
       <CommandPalette
