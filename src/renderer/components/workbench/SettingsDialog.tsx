@@ -1,25 +1,47 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { Check, Copy, ExternalLink, Keyboard, Server, ShieldCheck, X } from 'lucide-react';
+import {
+  BadgeCheck,
+  Check,
+  CircleHelp,
+  Copy,
+  ExternalLink,
+  Keyboard,
+  Layers3,
+  LoaderCircle,
+  RefreshCw,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 
-import type { DesktopStatus } from '../../../shared/contracts';
+import type { DesktopCapabilitySnapshot, DesktopCapabilityState, DesktopStatus } from '../../../shared/contracts';
 
 interface SettingsDialogProps {
   open: boolean;
   status: DesktopStatus;
+  capabilities: DesktopCapabilitySnapshot;
+  onRefreshCapabilities(): void;
   onOpenChange(open: boolean): void;
 }
 
 const upstreamUrl = 'https://github.com/MoonshotAI/kimi-code';
 const projectUrl = 'https://github.com/wjt0321/kimi-code-desktop';
 
-export function SettingsDialog({ open, status, onOpenChange }: SettingsDialogProps) {
+export function SettingsDialog({ open, status, capabilities, onRefreshCapabilities, onOpenChange }: SettingsDialogProps) {
   const [copied, setCopied] = useState<string>();
   const copy = async (value: string) => {
     await navigator.clipboard.writeText(value);
     setCopied(value);
     window.setTimeout(() => setCopied((current) => current === value ? undefined : current), 1_500);
   };
+  const capabilityGroups = [
+    { label: '会话运行控制', description: '模型、思考强度与权限策略', state: capabilities.capabilities.sessionRuntime },
+    { label: '结构化任务过程', description: '工具调用、审批与任务时间线', state: capabilities.capabilities.transcript },
+    { label: '后台任务通知', description: '后台任务快照与完成通知', state: capabilities.capabilities.nonBlockingTaskOutput },
+    { label: '新版扩展能力', description: '副模型、账号资料与 Agent Profile', state: extensionState(capabilities) },
+  ];
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -27,18 +49,53 @@ export function SettingsDialog({ open, status, onOpenChange }: SettingsDialogPro
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content className="settings-dialog" aria-label="设置与关于">
           <header className="dialog-heading">
-            <div><Dialog.Title>设置与关于</Dialog.Title><Dialog.Description>本机运行状态、快捷键与开源信息。</Dialog.Description></div>
+            <div><Dialog.Title>设置与关于</Dialog.Title><Dialog.Description>版本兼容、键盘操作与开源归属。</Dialog.Description></div>
             <Dialog.Close asChild><button type="button" className="icon-button" aria-label="关闭设置"><X size={16} /></button></Dialog.Close>
           </header>
 
           <div className="settings-grid">
-            <section className="settings-section">
-              <div className="settings-section__title"><Server size={16} /><span>本机运行环境</span></div>
-              <dl className="settings-list">
-                <div><dt>CLI</dt><dd>{status.cli.kind === 'ready' ? `已就绪 · ${status.cli.version}` : '未就绪'}</dd></div>
-                <div><dt>命令</dt><dd title={status.cli.kind === 'ready' ? status.cli.command : undefined}>{status.cli.kind === 'ready' ? status.cli.command : '尚未检测到'}</dd></div>
-                <div><dt>服务</dt><dd>{serverLabel(status)}</dd></div>
+            <section className="settings-section settings-section--compatibility">
+              <div className="settings-section__title-row">
+                <div className="settings-section__title"><Server size={16} /><span>版本与兼容性</span></div>
+                <button
+                  type="button"
+                  className="settings-refresh"
+                  disabled={capabilities.phase === 'detecting'}
+                  onClick={onRefreshCapabilities}
+                >
+                  <RefreshCw size={12} className={capabilities.phase === 'detecting' ? 'spin' : undefined} />
+                  {capabilities.phase === 'detecting' ? '检测中' : '重新检测'}
+                </button>
+              </div>
+
+              <div className={`compatibility-card compatibility-card--${capabilities.compatibilityMode ? 'compat' : 'current'}`}>
+                <span className="compatibility-card__icon">{capabilities.compatibilityMode ? <Layers3 size={16} /> : <BadgeCheck size={16} />}</span>
+                <div>
+                  <strong>{capabilities.compatibilityMode ? '已启用兼容模式' : '当前 CLI 支持新版能力'}</strong>
+                  <p>{compatibilityCopy(capabilities)}</p>
+                </div>
+              </div>
+
+              <dl className="settings-list settings-list--versions">
+                <div><dt>桌面端</dt><dd>桌面端 {capabilities.desktopVersion}</dd></div>
+                <div><dt>系统 CLI</dt><dd>{status.cli.kind === 'ready' ? status.cli.version : capabilities.cliVersion ?? '未检测到'}</dd></div>
+                <div><dt>本地服务</dt><dd>{capabilities.serverVersion ?? serverLabel(status)}</dd></div>
+                <div><dt>CLI 命令</dt><dd title={status.cli.kind === 'ready' ? status.cli.command : undefined}>{status.cli.kind === 'ready' ? status.cli.command : '尚未检测到'}</dd></div>
               </dl>
+
+              <div className="capability-list" aria-label="本地服务能力">
+                {capabilityGroups.map((item) => {
+                  const presentation = capabilityPresentation(item.state, capabilities.phase);
+                  const Icon = presentation.icon;
+                  return (
+                    <div className="capability-row" key={item.label}>
+                      <span className={`capability-row__icon capability-state--${presentation.tone}`}><Icon size={13} className={presentation.spinning ? 'spin' : undefined} /></span>
+                      <span className="capability-row__copy"><strong>{item.label}</strong><small>{item.description}</small></span>
+                      <span className={`capability-row__state capability-state--${presentation.tone}`}>{presentation.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </section>
 
             <section className="settings-section">
@@ -69,6 +126,30 @@ export function SettingsDialog({ open, status, onOpenChange }: SettingsDialogPro
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+function extensionState(snapshot: DesktopCapabilitySnapshot): DesktopCapabilityState {
+  const states = [
+    snapshot.capabilities.secondaryModel,
+    snapshot.capabilities.managedUserInfo,
+    snapshot.capabilities.promptProfile,
+  ];
+  if (states.some((state) => state === 'supported')) return 'supported';
+  if (states.some((state) => state === 'unknown')) return 'unknown';
+  return 'unsupported';
+}
+
+function capabilityPresentation(state: DesktopCapabilityState, phase: DesktopCapabilitySnapshot['phase']) {
+  if (phase === 'detecting') return { label: '正在检测', tone: 'unknown', icon: LoaderCircle, spinning: true };
+  if (state === 'supported') return { label: '已可用', tone: 'supported', icon: BadgeCheck, spinning: false };
+  if (state === 'unsupported') return { label: '当前版本未提供', tone: 'unsupported', icon: Sparkles, spinning: false };
+  return { label: '暂未确认', tone: 'unknown', icon: CircleHelp, spinning: false };
+}
+
+function compatibilityCopy(snapshot: DesktopCapabilitySnapshot): string {
+  if (snapshot.phase === 'detecting') return '正在读取本地服务能力，不会修改你的 CLI 配置。';
+  if (snapshot.compatibilityMode) return `当前使用 Kimi Code CLI ${snapshot.cliVersion ?? '0.30'}，现有任务功能可以正常使用；新版能力会在升级后自动出现。`;
+  return '桌面端会根据本地服务的实际能力渐进显示功能，不依赖固定版本假设。';
 }
 
 function serverLabel(status: DesktopStatus): string {

@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { CreateTaskRequest, DesktopDiffTarget, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace, UpdateRuntimeRequest } from '../../../shared/contracts';
+import type { CreateTaskRequest, DesktopCapabilitySnapshot, DesktopDiffTarget, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace, UpdateRuntimeRequest } from '../../../shared/contracts';
 import kimiBanner from '../../assets/kimi-banner-dark.svg';
 import kimiIcon from '../../assets/kimi-icon.svg';
 import { ArchivedSessionsDialog } from './ArchivedSessionsDialog';
@@ -39,8 +39,25 @@ import { TaskComposer } from './TaskComposer';
 import { TaskTimeline } from './TaskTimeline';
 import { presentWorkbenchStatus } from './workbench-status';
 
+const fallbackCapabilities: DesktopCapabilitySnapshot = {
+  phase: 'idle',
+  desktopVersion: '0.5.0',
+  compatibilityMode: false,
+  capabilities: {
+    sessionRuntime: 'unknown',
+    sessionWarnings: 'unknown',
+    transcript: 'unknown',
+    config: 'unknown',
+    secondaryModel: 'unknown',
+    managedUserInfo: 'unknown',
+    promptProfile: 'unknown',
+    nonBlockingTaskOutput: 'unknown',
+  },
+};
+
 interface WorkbenchShellProps {
   status: DesktopStatus;
+  capabilities?: DesktopCapabilitySnapshot;
   workspaces: DesktopWorkspace[];
   models: DesktopModel[];
   selectedModelId: string | undefined;
@@ -61,6 +78,7 @@ interface WorkbenchShellProps {
   sessionActionRequest?: { revision: number; action: SessionDialogAction };
   archivedRequest?: number;
   onStart(): void;
+  onRefreshCapabilities?(): void;
   onChooseCli?(): void;
   onStop(): void;
   onSelectWorkspace(workspaceId: string): void;
@@ -89,6 +107,7 @@ interface WorkbenchShellProps {
 
 export function WorkbenchShell({
   status,
+  capabilities = fallbackCapabilities,
   workspaces,
   models,
   selectedModelId,
@@ -109,6 +128,7 @@ export function WorkbenchShell({
   sessionActionRequest,
   archivedRequest,
   onStart,
+  onRefreshCapabilities = () => undefined,
   onChooseCli = () => undefined,
   onStop,
   onSelectWorkspace,
@@ -389,7 +409,7 @@ export function WorkbenchShell({
       </section>
 
       <NewTaskDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onCreateTask={onCreateTask} onChooseFolder={onChooseWorkspaceFolder} onCreateWorkspace={onCreateWorkspace} />
-      <SettingsDialog open={settingsOpen} status={status} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} status={status} capabilities={capabilities} onRefreshCapabilities={onRefreshCapabilities} onOpenChange={setSettingsOpen} />
 
 
       <SessionActionDialogs action={sessionDialogAction} sessionTitle={selectedSession?.title ?? ''} onClose={() => setSessionDialogAction(undefined)} onUndo={onUndoTask} onCompact={onCompactTask} onFork={onForkTask} />

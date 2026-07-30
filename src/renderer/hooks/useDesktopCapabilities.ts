@@ -23,10 +23,12 @@ export function useDesktopCapabilities() {
 
   useEffect(() => {
     let active = true;
-    void window.desktop.capabilities().then((next) => {
+    const api = window.desktop;
+    if (typeof api.capabilities !== 'function' || typeof api.onCapabilities !== 'function') return () => { active = false; };
+    void api.capabilities().then((next) => {
       if (active) setCapabilities(next);
     });
-    const unsubscribe = window.desktop.onCapabilities((next) => {
+    const unsubscribe = api.onCapabilities((next) => {
       if (active) setCapabilities(next);
     });
     return () => {
@@ -36,10 +38,11 @@ export function useDesktopCapabilities() {
   }, []);
 
   const refreshCapabilities = useCallback(async () => {
+    if (typeof window.desktop.refreshCapabilities !== 'function') return capabilities;
     const next = await window.desktop.refreshCapabilities();
     setCapabilities(next);
     return next;
-  }, []);
+  }, [capabilities]);
 
   return { capabilities, refreshCapabilities };
 }
