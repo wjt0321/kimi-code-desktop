@@ -11,6 +11,8 @@ import type {
   DesktopStatus,
   DesktopTaskEvent,
   DesktopTaskSnapshot,
+  DesktopThemeSnapshot,
+  SetThemeRequest,
   DesktopWorkspace,
   ForkSessionRequest,
   PromptRequest,
@@ -27,6 +29,9 @@ import type {
 
 export interface DesktopApi {
   status(): Promise<DesktopStatus>;
+  theme(): Promise<DesktopThemeSnapshot>;
+  setTheme(input: SetThemeRequest): Promise<DesktopThemeSnapshot>;
+  onTheme(listener: (snapshot: DesktopThemeSnapshot) => void): () => void;
   capabilities(): Promise<DesktopCapabilitySnapshot>;
   refreshCapabilities(): Promise<DesktopCapabilitySnapshot>;
   refreshCli(): Promise<DesktopStatus>;

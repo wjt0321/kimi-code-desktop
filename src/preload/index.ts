@@ -14,6 +14,8 @@ import {
   DesktopStatusSchema,
   DesktopTaskEventSchema,
   DesktopTaskSnapshotSchema,
+  DesktopThemeSnapshotSchema,
+  SetThemeRequestSchema,
   DesktopWorkspaceSchema,
   ForkSessionRequestSchema,
   PromptRequestSchema,
@@ -37,6 +39,7 @@ import {
   type DesktopStatus,
   type DesktopTaskEvent,
   type DesktopTaskSnapshot,
+  type DesktopThemeSnapshot,
   type DesktopWorkspace,
   type ForkSessionRequest,
   type PromptRequest,
@@ -47,8 +50,15 @@ import {
   type UpdateRuntimeRequest,
 } from '../shared/contracts';
 
+const bootstrapTheme = process.argv.find((value) => value.startsWith('--kimi-desktop-theme='))?.split('=')[1];
+if (bootstrapTheme === 'light' || bootstrapTheme === 'dark') document.documentElement.dataset.theme = bootstrapTheme;
+
 function parseStatus(value: unknown): DesktopStatus {
   return DesktopStatusSchema.parse(value);
+}
+
+function parseTheme(value: unknown): DesktopThemeSnapshot {
+  return DesktopThemeSnapshotSchema.parse(value);
 }
 
 function parseCapabilities(value: unknown): DesktopCapabilitySnapshot {
@@ -98,6 +108,13 @@ function subscribe(listener: (status: DesktopStatus) => void): () => void {
   return () => ipcRenderer.removeListener(eventName, handler);
 }
 
+function subscribeTheme(listener: (snapshot: DesktopThemeSnapshot) => void): () => void {
+  const eventName = 'desktop:theme-changed';
+  const handler = (_event: Electron.IpcRendererEvent, value: unknown) => listener(parseTheme(value));
+  ipcRenderer.on(eventName, handler);
+  return () => ipcRenderer.removeListener(eventName, handler);
+}
+
 function subscribeCapabilities(listener: (snapshot: DesktopCapabilitySnapshot) => void): () => void {
   const eventName = 'desktop:capabilities-changed';
   const handler = (_event: Electron.IpcRendererEvent, value: unknown) => listener(parseCapabilities(value));
@@ -121,6 +138,9 @@ function subscribeCloseRequested(listener: () => void): () => void {
 
 contextBridge.exposeInMainWorld('desktop', {
   status: () => ipcRenderer.invoke('desktop:status').then(parseStatus),
+  theme: () => ipcRenderer.invoke('desktop:theme').then(parseTheme),
+  setTheme: (input: unknown) => ipcRenderer.invoke('desktop:set-theme', SetThemeRequestSchema.parse(input)).then(parseTheme),
+  onTheme: subscribeTheme,
   capabilities: () => ipcRenderer.invoke('desktop:capabilities').then(parseCapabilities),
   refreshCapabilities: () => ipcRenderer.invoke('desktop:refresh-capabilities').then(parseCapabilities),
   refreshCli: () => ipcRenderer.invoke('desktop:refresh-cli').then(parseStatus),

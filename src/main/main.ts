@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
@@ -12,11 +12,14 @@ import {
   QuestionResponseRequestSchema,
   RenameSessionRequestSchema,
   SessionIdSchema,
+  SetThemeRequestSchema,
+  type ResolvedTheme,
   TaskWatchRequestSchema,
   WorkspaceRootRequestSchema,
 } from '../shared/contracts';
 import { discoverKimiCli, validateKimiCli } from './cli/cli-discovery';
 import { createReviewIpcHandlers, createSessionIpcHandlers, DesktopController } from './ipc';
+import { createDesktopPreferencesStore } from './preferences/desktop-preferences';
 import { isTrustedNavigation } from './navigation-guard';
 import { createChildProcessFactory } from './server/child-process-factory';
 import { KimiCapabilityService } from './server/capability-service';
@@ -24,24 +27,26 @@ import { KimiDesktopClient } from './server/kimi-client';
 import { LiveTaskFeed } from './server/live-task-feed';
 import { KimiServerLifecycle } from './server/server-lifecycle';
 import { createRuntimeShutdown } from './runtime-shutdown';
-import { createCloseRequestController, resolveWindowIconPath } from './window-behavior';
+import { DesktopThemeService } from './theme/theme-service';
+import { createCloseRequestController, resolveWindowIconPath, resolveWindowTheme } from './window-behavior';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
-export function createMainWindow(onClosed?: () => void): BrowserWindow {
+export function createMainWindow(onClosed?: () => void, resolvedTheme: ResolvedTheme = 'dark'): BrowserWindow {
+  const windowTheme = resolveWindowTheme(resolvedTheme);
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 960,
     minHeight: 640,
     show: false,
-    backgroundColor: '#101216',
+    backgroundColor: windowTheme.backgroundColor,
     icon: resolveWindowIconPath(app.isPackaged, process.resourcesPath, currentDir),
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#0f1014',
-      symbolColor: '#9da3b0',
+      color: windowTheme.overlayColor,
+      symbolColor: windowTheme.symbolColor,
       height: 36,
     },
     webPreferences: {
@@ -49,6 +54,7 @@ export function createMainWindow(onClosed?: () => void): BrowserWindow {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      additionalArguments: [`--kimi-desktop-theme=${resolvedTheme}`],
     },
   });
 
@@ -93,7 +99,7 @@ function getAvailablePort(): Promise<number> {
   });
 }
 
-function registerIpc(controller: DesktopController, client: KimiDesktopClient): void {
+function registerIpc(controller: DesktopController, client: KimiDesktopClient, theme: DesktopThemeService): void {
   const sessionHandlers = createSessionIpcHandlers(client);
   const reviewHandlers = createReviewIpcHandlers({
     exists: existsSync,
@@ -101,6 +107,8 @@ function registerIpc(controller: DesktopController, client: KimiDesktopClient): 
     copy: (text) => clipboard.writeText(text),
   });
   ipcMain.handle('desktop:status', () => controller.status());
+  ipcMain.handle('desktop:theme', () => theme.snapshot());
+  ipcMain.handle('desktop:set-theme', (_event, input: unknown) => theme.setPreference(SetThemeRequestSchema.parse(input).preference));
   ipcMain.handle('desktop:capabilities', () => controller.capabilitySnapshot());
   ipcMain.handle('desktop:refresh-capabilities', () => controller.refreshCapabilities());
   ipcMain.handle('desktop:refresh-cli', () => controller.refreshCli());
@@ -177,6 +185,9 @@ function registerIpc(controller: DesktopController, client: KimiDesktopClient): 
 app.whenReady().then(async () => {
   app.setAppUserModelId('io.github.wjt0321.kimi-code-desktop');
   Menu.setApplicationMenu(null);
+  const preferences = createDesktopPreferencesStore(join(app.getPath('userData'), 'desktop-preferences.json'));
+  const theme = new DesktopThemeService(nativeTheme, preferences);
+  await theme.initialize();
   const lifecycle = new KimiServerLifecycle({ childFactory: createChildProcessFactory(), portProvider: getAvailablePort });
   const capabilities = new KimiCapabilityService({
     desktopVersion: app.getVersion(),
@@ -190,17 +201,25 @@ app.whenReady().then(async () => {
     feed,
     capabilities,
   });
-  registerIpc(controller, new KimiDesktopClient(lifecycle, capabilities));
+  registerIpc(controller, new KimiDesktopClient(lifecycle, capabilities), theme);
   controller.onTaskEvent((event) => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('desktop:task-event', event);
   });
+  theme.onSnapshot((snapshot) => {
+    const colors = resolveWindowTheme(snapshot.resolved);
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.setBackgroundColor(colors.backgroundColor);
+      window.setTitleBarOverlay({ color: colors.overlayColor, symbolColor: colors.symbolColor, height: 36 });
+      window.webContents.send('desktop:theme-changed', snapshot);
+    }
+  });
   const shutdown = createRuntimeShutdown(feed, lifecycle);
   const closeRuntime = () => shutdown();
-  createMainWindow(closeRuntime);
+  createMainWindow(closeRuntime, theme.snapshot().resolved);
   await controller.refreshCli();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow(closeRuntime);
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow(closeRuntime, theme.snapshot().resolved);
   });
 
   app.on('before-quit', shutdown);

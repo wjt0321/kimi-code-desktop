@@ -6,6 +6,7 @@ import {
   Copy,
   ExternalLink,
   Keyboard,
+  Palette,
   Layers3,
   LoaderCircle,
   RefreshCw,
@@ -16,12 +17,16 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
-import type { DesktopCapabilitySnapshot, DesktopCapabilityState, DesktopStatus } from '../../../shared/contracts';
+import { ThemeControl } from './ThemeControl';
+
+import type { DesktopCapabilitySnapshot, DesktopCapabilityState, DesktopStatus, DesktopThemeSnapshot, ThemePreference } from '../../../shared/contracts';
 
 interface SettingsDialogProps {
   open: boolean;
   status: DesktopStatus;
   capabilities: DesktopCapabilitySnapshot;
+  theme?: DesktopThemeSnapshot;
+  onThemeChange?(preference: ThemePreference): void;
   onRefreshCapabilities(): void;
   onOpenChange(open: boolean): void;
 }
@@ -29,7 +34,7 @@ interface SettingsDialogProps {
 const upstreamUrl = 'https://github.com/MoonshotAI/kimi-code';
 const projectUrl = 'https://github.com/wjt0321/kimi-code-desktop';
 
-export function SettingsDialog({ open, status, capabilities, onRefreshCapabilities, onOpenChange }: SettingsDialogProps) {
+export function SettingsDialog({ open, status, capabilities, theme = { preference: 'system', resolved: 'dark' }, onThemeChange = () => {}, onRefreshCapabilities, onOpenChange }: SettingsDialogProps) {
   const [copied, setCopied] = useState<string>();
   const copy = async (value: string) => {
     await navigator.clipboard.writeText(value);
@@ -54,6 +59,11 @@ export function SettingsDialog({ open, status, capabilities, onRefreshCapabiliti
           </header>
 
           <div className="settings-grid">
+            <section className="settings-section settings-section--appearance">
+              <div className="settings-section__title"><Palette size={16} /><span>外观</span></div>
+              <p className="settings-copy">选择浅色、深色，或跟随 Windows 系统主题实时变化。</p>
+              <ThemeControl theme={theme} onChange={onThemeChange} />
+            </section>
             <section className="settings-section settings-section--compatibility">
               <div className="settings-section__title-row">
                 <div className="settings-section__title"><Server size={16} /><span>版本与兼容性</span></div>

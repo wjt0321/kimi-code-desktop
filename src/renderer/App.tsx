@@ -5,6 +5,7 @@ import { CliSetupView } from './components/CliSetupView';
 import { CommandPalette } from './components/CommandPalette';
 import { ExitDialog } from './components/ExitDialog';
 import { useDesktopCapabilities } from './hooks/useDesktopCapabilities';
+import { useDesktopTheme } from './hooks/useDesktopTheme';
 import { useDesktopStatus } from './hooks/useDesktopStatus';
 import { useWorkbench } from './hooks/useWorkbench';
 
@@ -14,6 +15,7 @@ export function App() {
   const [sessionActionRequest, setSessionActionRequest] = useState<{ revision: number; action: 'compact' | 'fork' | 'undo' }>();
   const [archivedRequest, setArchivedRequest] = useState(0);
   const desktop = useDesktopStatus();
+  const desktopTheme = useDesktopTheme();
   const desktopCapabilities = useDesktopCapabilities();
   const { status } = desktop;
   const workbench = useWorkbench(status.server.kind === 'connected');
@@ -51,6 +53,8 @@ export function App() {
       <WorkbenchShell
         status={status}
         capabilities={desktopCapabilities.capabilities}
+        theme={desktopTheme.theme}
+        onThemeChange={(preference) => void desktopTheme.setTheme(preference)}
         onRefreshCapabilities={() => void desktopCapabilities.refreshCapabilities()}
         workspaces={workbench.workspaces}
         models={workbench.models}

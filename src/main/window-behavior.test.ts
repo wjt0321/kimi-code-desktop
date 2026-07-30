@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createCloseRequestController, resolveWindowIconPath } from './window-behavior';
+import { createCloseRequestController, resolveWindowIconPath, resolveWindowTheme } from './window-behavior';
 
 describe('window behavior', () => {
   it('asks the renderer to confirm and only closes after renderer confirmation', () => {
@@ -22,6 +22,11 @@ describe('window behavior', () => {
     const finalEvent = { preventDefault: vi.fn() };
     controller.handleClose(finalEvent);
     expect(finalEvent.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('maps light and dark themes to matching native window colors', () => {
+    expect(resolveWindowTheme('dark')).toEqual({ backgroundColor: '#101216', overlayColor: '#0f1014', symbolColor: '#9da3b0' });
+    expect(resolveWindowTheme('light')).toEqual({ backgroundColor: '#f2f1ed', overlayColor: '#ebeae6', symbolColor: '#4f5561' });
   });
 
   it('uses the packaged extra resource for the runtime window icon', () => {

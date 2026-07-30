@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { CreateTaskRequest, DesktopCapabilitySnapshot, DesktopDiffTarget, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace, UpdateRuntimeRequest } from '../../../shared/contracts';
+import type { CreateTaskRequest, DesktopCapabilitySnapshot, DesktopDiffTarget, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopThemeSnapshot, DesktopWorkspace, ThemePreference, UpdateRuntimeRequest } from '../../../shared/contracts';
 import kimiBanner from '../../assets/kimi-banner-dark.svg';
 import kimiIcon from '../../assets/kimi-icon.svg';
 import { ArchivedSessionsDialog } from './ArchivedSessionsDialog';
@@ -58,6 +58,8 @@ const fallbackCapabilities: DesktopCapabilitySnapshot = {
 interface WorkbenchShellProps {
   status: DesktopStatus;
   capabilities?: DesktopCapabilitySnapshot;
+  theme?: DesktopThemeSnapshot;
+  onThemeChange?(preference: ThemePreference): void;
   workspaces: DesktopWorkspace[];
   models: DesktopModel[];
   selectedModelId: string | undefined;
@@ -108,6 +110,8 @@ interface WorkbenchShellProps {
 export function WorkbenchShell({
   status,
   capabilities = fallbackCapabilities,
+  theme = { preference: 'system', resolved: 'dark' },
+  onThemeChange = () => {},
   workspaces,
   models,
   selectedModelId,
@@ -409,7 +413,7 @@ export function WorkbenchShell({
       </section>
 
       <NewTaskDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onCreateTask={onCreateTask} onChooseFolder={onChooseWorkspaceFolder} onCreateWorkspace={onCreateWorkspace} />
-      <SettingsDialog open={settingsOpen} status={status} capabilities={capabilities} onRefreshCapabilities={onRefreshCapabilities} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} status={status} capabilities={capabilities} theme={theme} onThemeChange={onThemeChange} onRefreshCapabilities={onRefreshCapabilities} onOpenChange={setSettingsOpen} />
 
 
       <SessionActionDialogs action={sessionDialogAction} sessionTitle={selectedSession?.title ?? ''} onClose={() => setSessionDialogAction(undefined)} onUndo={onUndoTask} onCompact={onCompactTask} onFork={onForkTask} />
