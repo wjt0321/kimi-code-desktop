@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { DesktopTaskSnapshot } from '../../../shared/contracts';
+import type { DesktopSessionRuntime, DesktopTaskSnapshot } from '../../../shared/contracts';
 import { ContextDock } from './ContextDock';
 
 const snapshot: DesktopTaskSnapshot = {
@@ -16,6 +16,21 @@ const snapshot: DesktopTaskSnapshot = {
   status: { phase: 'awaiting_approval' },
 };
 
+const runtime: DesktopSessionRuntime = {
+  available: true,
+  model: 'kimi-code/k3',
+  thinkingLevel: 'high',
+  permission: 'auto',
+  planMode: true,
+  swarmMode: false,
+  contextTokens: 12000,
+  maxContextTokens: 128000,
+  contextUsage: 0.09375,
+  warnings: [{ code: 'context', message: '上下文即将需要压缩', severity: 'warning' }],
+};
+
+afterEach(cleanup);
+
 describe('ContextDock', () => {
   it('puts pending approval first and sends an explicit decision', async () => {
     const user = userEvent.setup();
@@ -23,6 +38,9 @@ describe('ContextDock', () => {
     render(
       <ContextDock
         snapshot={snapshot}
+        runtime={runtime}
+        runtimeLoading={false}
+        onRefreshRuntime={vi.fn()}
         onApprove={onApprove}
         onReject={vi.fn()}
         onAnswer={vi.fn()}
@@ -34,4 +52,30 @@ describe('ContextDock', () => {
     await user.click(screen.getByRole('button', { name: '允许一次' }));
     expect(onApprove).toHaveBeenCalledWith('approval-1');
   });
+
+  it('renders confirmed runtime details, warnings, and refresh action', async () => {
+    const user = userEvent.setup();
+    const onRefreshRuntime = vi.fn();
+    render(
+      <ContextDock
+        snapshot={{ ...snapshot, approvals: [] }}
+        runtime={runtime}
+        runtimeLoading={false}
+        onRefreshRuntime={onRefreshRuntime}
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        onAnswer={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('上下文 12,000 / 128,000')).not.toBeNull();
+    expect(screen.getByText('思考强度 高')).not.toBeNull();
+    expect(screen.getByText('权限 完全自动')).not.toBeNull();
+    expect(screen.getByText('计划模式 已开启')).not.toBeNull();
+    expect(screen.getByRole('status', { name: '警告：上下文即将需要压缩' })).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: '刷新运行状态' }));
+    expect(onRefreshRuntime).toHaveBeenCalledOnce();
+  });
+
 });

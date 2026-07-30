@@ -55,6 +55,8 @@ interface WorkbenchShellProps {
   loading: boolean;
   error: string | undefined;
   newTaskRequest?: number;
+  sessionActionRequest?: { revision: number; action: SessionDialogAction };
+  archivedRequest?: number;
   onStart(): void;
   onChooseCli?(): void;
   onStop(): void;
@@ -63,6 +65,7 @@ interface WorkbenchShellProps {
   onCreateTask(input: CreateTaskRequest): void;
   onSelectModel(modelId: string): void;
   onRuntimeChange(patch: Omit<UpdateRuntimeRequest, 'sessionId'>): void;
+  onRefreshRuntime(): void;
   onDraftConsumed(): void;
   onChooseWorkspaceFolder(): Promise<string | null>;
   onCreateWorkspace(root: string): Promise<DesktopWorkspace | undefined>;
@@ -100,6 +103,8 @@ export function WorkbenchShell({
   loading,
   error,
   newTaskRequest,
+  sessionActionRequest,
+  archivedRequest,
   onStart,
   onChooseCli = () => undefined,
   onStop,
@@ -108,6 +113,7 @@ export function WorkbenchShell({
   onCreateTask,
   onSelectModel,
   onRuntimeChange,
+  onRefreshRuntime,
   onDraftConsumed,
   onChooseWorkspaceFolder,
   onCreateWorkspace,
@@ -139,10 +145,12 @@ export function WorkbenchShell({
   const [sessionDialogAction, setSessionDialogAction] = useState<SessionDialogAction>();
   const [archivedOpen, setArchivedOpen] = useState(false);
   const lastNewTaskRequest = useRef(newTaskRequest);
+  const lastSessionActionRequest = useRef(sessionActionRequest?.revision);
+  const lastArchivedRequest = useRef(archivedRequest);
 
   const connected = status.server.kind === 'connected';
   const attentionCount = snapshot ? snapshot.approvals.length + snapshot.questions.length : 0;
-  const canShowContext = Boolean(snapshot && (attentionCount > 0 || snapshot.todos.length > 0 || snapshot.tasks.length > 0));
+  const canShowContext = Boolean(snapshot && (attentionCount > 0 || snapshot.todos.length > 0 || snapshot.tasks.length > 0 || runtime !== undefined || runtimeLoading));
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId);
   const statusSummary = presentWorkbenchStatus(status, selectedSession, snapshot);
   const filteredSessions = useMemo(() => filterSessions(sessions, query), [query, sessions]);
@@ -152,6 +160,18 @@ export function WorkbenchShell({
     lastNewTaskRequest.current = newTaskRequest;
     setNewTaskOpen(true);
   }, [newTaskRequest]);
+
+  useEffect(() => {
+    if (!sessionActionRequest || sessionActionRequest.revision === lastSessionActionRequest.current) return;
+    lastSessionActionRequest.current = sessionActionRequest.revision;
+    window.setTimeout(() => setSessionDialogAction(sessionActionRequest.action), 0);
+  }, [sessionActionRequest]);
+
+  useEffect(() => {
+    if (archivedRequest === undefined || archivedRequest === lastArchivedRequest.current) return;
+    lastArchivedRequest.current = archivedRequest;
+    setArchivedOpen(true);
+  }, [archivedRequest]);
 
   useEffect(() => {
     localStorage.setItem('kimi-desktop:sidebar', sidebarCollapsed ? 'collapsed' : 'expanded');
@@ -380,7 +400,7 @@ export function WorkbenchShell({
         </Dialog.Portal>
       </Dialog.Root>
 
-      {contextOpen && snapshot && canShowContext ? <ContextDock snapshot={snapshot} onApprove={onApprove} onReject={onReject} onAnswer={onAnswer} onDismiss={onDismiss} onClose={() => setContextOpen(false)} /> : null}
+      {contextOpen && snapshot && canShowContext ? <ContextDock snapshot={snapshot} runtime={runtime} runtimeLoading={runtimeLoading} onRefreshRuntime={onRefreshRuntime} onApprove={onApprove} onReject={onReject} onAnswer={onAnswer} onDismiss={onDismiss} onClose={() => setContextOpen(false)} /> : null}
     </main>
   );
 }

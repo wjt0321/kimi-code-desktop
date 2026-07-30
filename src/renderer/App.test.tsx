@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { DesktopModel, DesktopSession, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace } from '../shared/contracts';
+import type { DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace } from '../shared/contracts';
 import { App } from './App';
 
 const cliCommand = 'C:\\Users\\example\\AppData\\Roaming\\npm\\kimi.cmd';
@@ -24,6 +24,19 @@ const task: DesktopSession = {
   cwd: 'C:\\workspace',
   workspaceId: 'ws_1',
 };
+const runtime: DesktopSessionRuntime = {
+  available: true,
+  model: 'kimi-code/k3',
+  thinkingLevel: 'high',
+  permission: 'manual',
+  planMode: false,
+  swarmMode: false,
+  contextTokens: 12000,
+  maxContextTokens: 128000,
+  contextUsage: 0.09375,
+  warnings: [],
+};
+
 const snapshot: DesktopTaskSnapshot = {
   session: task,
   agentId: 'main',
@@ -57,7 +70,14 @@ const desktopApi = {
   stopServer: vi.fn<() => Promise<DesktopStatus>>(),
   listWorkspaces: vi.fn<() => Promise<DesktopWorkspace[]>>(),
   listSessions: vi.fn<() => Promise<DesktopSession[]>>(),
+  listArchivedSessions: vi.fn<() => Promise<DesktopSession[]>>(),
   listModels: vi.fn<() => Promise<DesktopModel[]>>(),
+  getSessionRuntime: vi.fn<(sessionId: string) => Promise<DesktopSessionRuntime>>(),
+  updateSessionRuntime: vi.fn<(input: { sessionId: string; model?: string; thinkingLevel?: string; permission?: 'manual' | 'yolo' | 'auto'; planMode?: boolean }) => Promise<DesktopSessionRuntime>>(),
+  compactSession: vi.fn(),
+  undoSession: vi.fn(),
+  forkSession: vi.fn(),
+  restoreSession: vi.fn(),
   getTaskSnapshot: vi.fn<(sessionId: string) => Promise<DesktopTaskSnapshot>>(),
   watchTask: vi.fn<(input: { sessionId: string; agentId: string }) => Promise<void>>(),
   unwatchTask: vi.fn<(sessionId?: string) => Promise<void>>(),
@@ -70,6 +90,8 @@ const desktopApi = {
   respondApproval: vi.fn(),
   respondQuestion: vi.fn(),
   dismissQuestion: vi.fn(),
+  renameSession: vi.fn(),
+  archiveSession: vi.fn(),
   confirmClose: vi.fn<() => void>(),
   onCloseRequested: vi.fn<(listener: () => void) => () => void>(),
   onStatus: vi.fn<(listener: (status: DesktopStatus) => void) => () => void>(),
@@ -87,7 +109,14 @@ beforeEach(() => {
   desktopApi.stopServer.mockResolvedValue(readyStatus);
   desktopApi.listWorkspaces.mockResolvedValue([]);
   desktopApi.listSessions.mockResolvedValue([]);
+  desktopApi.listArchivedSessions.mockResolvedValue([]);
   desktopApi.listModels.mockResolvedValue([]);
+  desktopApi.getSessionRuntime.mockResolvedValue(runtime);
+  desktopApi.updateSessionRuntime.mockResolvedValue(runtime);
+  desktopApi.compactSession.mockResolvedValue(undefined);
+  desktopApi.undoSession.mockResolvedValue(undefined);
+  desktopApi.forkSession.mockResolvedValue(task);
+  desktopApi.restoreSession.mockResolvedValue(task);
   desktopApi.getTaskSnapshot.mockResolvedValue(snapshot);
   desktopApi.watchTask.mockResolvedValue();
   desktopApi.unwatchTask.mockResolvedValue();
@@ -186,6 +215,27 @@ describe('App', () => {
     await waitFor(() => {
       expect(desktopApi.submitPrompt).toHaveBeenCalledWith({ sessionId: 'task-1', text: '解释当前任务', model: 'kimi-code/k3' });
     });
+  });
+
+
+  it('从命令面板打开当前任务的上下文操作和归档管理', async () => {
+    const user = userEvent.setup();
+    desktopApi.status.mockResolvedValue(connectedStatus);
+    desktopApi.listWorkspaces.mockResolvedValue([workspace]);
+    desktopApi.listSessions.mockResolvedValue([task]);
+    desktopApi.listModels.mockResolvedValue(models);
+    render(<App />);
+    await screen.findByText('我已经准备好了。');
+
+    await user.keyboard('{Control>}k{/Control}');
+    await user.click(await screen.findByRole('option', { name: '压缩上下文…' }));
+    expect(await screen.findByRole('dialog', { name: '压缩当前上下文' })).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: '取消' }));
+
+    await user.keyboard('{Control>}k{/Control}');
+    await user.click(await screen.findByRole('option', { name: '查看已归档任务' }));
+    expect(await screen.findByRole('dialog', { name: '已归档任务' })).not.toBeNull();
+    expect(desktopApi.listArchivedSessions).toHaveBeenCalled();
   });
 
   it('在中文工作台中打开待处理上下文并提交明确的审批决定', async () => {

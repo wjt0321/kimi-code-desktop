@@ -62,6 +62,7 @@ const actions = {
   onAnswer: vi.fn(),
   onDismiss: vi.fn(),
   onRuntimeChange: vi.fn(),
+  onRefreshRuntime: vi.fn(),
   onDraftConsumed: vi.fn(),
   onLoadArchived: vi.fn(),
   onRestoreTask: vi.fn().mockResolvedValue(true),

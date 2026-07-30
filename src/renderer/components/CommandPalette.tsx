@@ -11,6 +11,16 @@ interface CommandPaletteProps {
   onRefresh(): void;
   onChoose(): void;
   onCreateTask(): void;
+  hasSession: boolean;
+  sessionBusy: boolean;
+  runtimeAvailable: boolean;
+  planMode: boolean;
+  onRefreshRuntime(): void;
+  onTogglePlan(): void;
+  onUndo(): void;
+  onOpenCompact(): void;
+  onOpenFork(): void;
+  onOpenArchived(): void;
 }
 
 export function CommandPalette({
@@ -20,6 +30,16 @@ export function CommandPalette({
   onRefresh,
   onChoose,
   onCreateTask,
+  hasSession,
+  sessionBusy,
+  runtimeAvailable,
+  planMode,
+  onRefreshRuntime,
+  onTogglePlan,
+  onUndo,
+  onOpenCompact,
+  onOpenFork,
+  onOpenArchived,
 }: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
 
@@ -52,6 +72,14 @@ export function CommandPalette({
             <Command.Input autoFocus placeholder="搜索命令" />
             <Command.List>
               <Command.Empty>没有匹配的命令。</Command.Empty>
+              <Command.Group heading="当前任务">
+                <Command.Item disabled={!hasSession || !runtimeAvailable} onSelect={() => select(onRefreshRuntime)}>刷新任务运行状态</Command.Item>
+                <Command.Item disabled={!hasSession || !runtimeAvailable} onSelect={() => select(onTogglePlan)}>{planMode ? '关闭计划模式' : '开启计划模式'}</Command.Item>
+                <Command.Item disabled={!hasSession || sessionBusy} onSelect={() => select(onUndo)}>撤回上一轮</Command.Item>
+                <Command.Item disabled={!hasSession || sessionBusy} onSelect={() => select(onOpenCompact)}>压缩上下文…</Command.Item>
+                <Command.Item disabled={!hasSession || sessionBusy} onSelect={() => select(onOpenFork)}>派生新任务…</Command.Item>
+                <Command.Item disabled={!connected} onSelect={() => select(onOpenArchived)}>查看已归档任务</Command.Item>
+              </Command.Group>
               <Command.Group heading="工作台">
                 <Command.Item disabled={!connected} onSelect={() => select(onCreateTask)}>新建任务</Command.Item>
                 <Command.Item disabled={!ready || active} onSelect={() => select(onStart)}>启动本地服务</Command.Item>

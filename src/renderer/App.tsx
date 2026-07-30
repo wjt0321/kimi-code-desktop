@@ -10,6 +10,8 @@ import { useWorkbench } from './hooks/useWorkbench';
 export function App() {
   const [newTaskRequest, setNewTaskRequest] = useState(0);
   const [exitDialogOpen, setExitDialogOpen] = useState(false);
+  const [sessionActionRequest, setSessionActionRequest] = useState<{ revision: number; action: 'compact' | 'fork' | 'undo' }>();
+  const [archivedRequest, setArchivedRequest] = useState(0);
   const desktop = useDesktopStatus();
   const { status } = desktop;
   const workbench = useWorkbench(status.server.kind === 'connected');
@@ -62,6 +64,8 @@ export function App() {
         loading={workbench.loading}
         error={workbench.error}
         newTaskRequest={newTaskRequest}
+        sessionActionRequest={sessionActionRequest}
+        archivedRequest={archivedRequest}
         onStart={() => void desktop.startServer()}
         onChooseCli={() => void desktop.chooseCliExecutable()}
         onStop={() => void desktop.stopServer()}
@@ -70,6 +74,7 @@ export function App() {
         onCreateTask={(input) => void workbench.actions.createTask(input)}
         onSelectModel={workbench.actions.selectModel}
         onRuntimeChange={(patch) => void workbench.actions.updateRuntime(patch)}
+        onRefreshRuntime={() => void workbench.actions.refreshRuntime()}
         onDraftConsumed={workbench.actions.clearComposerDraft}
         onChooseWorkspaceFolder={workbench.actions.chooseWorkspaceFolder}
         onCreateWorkspace={workbench.actions.createWorkspace}
@@ -95,6 +100,16 @@ export function App() {
         onRefresh={() => void desktop.refreshCli()}
         onChoose={() => void desktop.chooseCliExecutable()}
         onCreateTask={() => setNewTaskRequest((value) => value + 1)}
+        hasSession={workbench.selectedSession !== undefined}
+        sessionBusy={workbench.selectedSession?.busy ?? false}
+        runtimeAvailable={workbench.runtime?.available ?? false}
+        planMode={workbench.runtime?.planMode ?? false}
+        onRefreshRuntime={() => void workbench.actions.refreshRuntime()}
+        onTogglePlan={() => { if (workbench.runtime?.available) void workbench.actions.updateRuntime({ planMode: !workbench.runtime.planMode }); }}
+        onUndo={() => void workbench.actions.undoTask()}
+        onOpenCompact={() => setSessionActionRequest((current) => ({ revision: (current?.revision ?? 0) + 1, action: 'compact' }))}
+        onOpenFork={() => setSessionActionRequest((current) => ({ revision: (current?.revision ?? 0) + 1, action: 'fork' }))}
+        onOpenArchived={() => setArchivedRequest((value) => value + 1)}
       />
       {exitDialog}
     </>

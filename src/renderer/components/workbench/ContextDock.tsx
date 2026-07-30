@@ -1,10 +1,13 @@
-import { Check, CircleHelp, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, BrainCircuit, Check, CircleHelp, Gauge, LoaderCircle, RefreshCw, Route, ShieldAlert, X } from 'lucide-react';
 import { useState } from 'react';
 
-import type { DesktopQuestion, DesktopTaskSnapshot } from '../../../shared/contracts';
+import type { DesktopQuestion, DesktopSessionRuntime, DesktopTaskSnapshot } from '../../../shared/contracts';
 
 interface ContextDockProps {
   snapshot: DesktopTaskSnapshot;
+  runtime: DesktopSessionRuntime | undefined;
+  runtimeLoading: boolean;
+  onRefreshRuntime(): void;
   onApprove(approvalId: string): void;
   onReject(approvalId: string): void;
   onAnswer(questionId: string, answers: Record<string, { kind: 'single'; optionId: string } | { kind: 'multi'; optionIds: string[] } | { kind: 'other'; text: string } | { kind: 'skipped' }>): void;
@@ -12,7 +15,7 @@ interface ContextDockProps {
   onClose?(): void;
 }
 
-export function ContextDock({ snapshot, onApprove, onReject, onAnswer, onDismiss, onClose }: ContextDockProps) {
+export function ContextDock({ snapshot, runtime, runtimeLoading, onRefreshRuntime, onApprove, onReject, onAnswer, onDismiss, onClose }: ContextDockProps) {
   const attentionCount = snapshot.approvals.length + snapshot.questions.length;
 
   return (
@@ -33,6 +36,22 @@ export function ContextDock({ snapshot, onApprove, onReject, onAnswer, onDismiss
             </article>
           ))}
           {snapshot.questions.map((question) => <QuestionCard key={question.id} question={question} onAnswer={onAnswer} onDismiss={onDismiss} />)}
+        </section>
+      ) : null}
+      {(runtime || runtimeLoading) ? (
+        <section className="context-section context-runtime">
+          <div className="context-section__heading"><h2>运行状态</h2><button type="button" className="context-refresh" aria-label="刷新运行状态" disabled={runtimeLoading} onClick={onRefreshRuntime}>{runtimeLoading ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}</button></div>
+          {runtime?.available ? (
+            <>
+              <div className="context-runtime__usage"><div><strong>上下文 {formatTokens(runtime.contextTokens)} / {formatTokens(runtime.maxContextTokens)}</strong><span>{Math.round(runtime.contextUsage * 100)}%</span></div><span className="context-runtime__track"><span style={{ width: `${Math.min(100, Math.max(0, runtime.contextUsage * 100))}%` }} /></span></div>
+              <div className="context-runtime__facts">
+                <div><BrainCircuit size={13} /><span>{`思考强度 ${thinkingLabel(runtime.thinkingLevel)}`}</span></div>
+                <div><Gauge size={13} /><span>{`权限 ${permissionLabel(runtime.permission)}`}</span></div>
+                <div><Route size={13} /><span>{`计划模式 ${runtime.planMode ? '已开启' : '未开启'}`}</span></div>
+              </div>
+              {runtime.warnings.map((warning) => <div key={`${warning.code}:${warning.message}`} className={`context-runtime__warning context-runtime__warning--${warning.severity}`} role={warning.severity === 'error' ? 'alert' : 'status'} aria-label={`${warningSeverityLabel(warning.severity)}：${warning.message}`}><AlertTriangle size={13} /><span>{warning.message}</span></div>)}
+            </>
+          ) : runtimeLoading ? <div className="context-runtime__loading"><LoaderCircle size={14} className="spin" />正在读取运行状态…</div> : <div className="context-runtime__loading">当前 CLI 不支持运行状态详情。</div>}
         </section>
       ) : null}
       {snapshot.todos.length ? (
@@ -104,4 +123,28 @@ function QuestionCard({ question, onAnswer, onDismiss }: {
       <div className="question-card__actions"><button type="button" className="button" onClick={submit}>提交回答</button><button type="button" className="button button--secondary" onClick={() => onDismiss(question.id)}>暂不处理</button></div>
     </article>
   );
+}
+
+
+const tokenFormatter = new Intl.NumberFormat('zh-CN');
+
+function formatTokens(value: number): string {
+  return tokenFormatter.format(value);
+}
+
+function thinkingLabel(value: string): string {
+  const labels: Record<string, string> = { off: '关闭', on: '开启', minimal: '极简', low: '低', medium: '中', high: '高', max: '最高' };
+  return labels[value] ?? value;
+}
+
+function permissionLabel(value: 'manual' | 'yolo' | 'auto'): string {
+  if (value === 'auto') return '完全自动';
+  if (value === 'yolo') return 'YOLO';
+  return '手动确认';
+}
+
+function warningSeverityLabel(value: 'info' | 'warning' | 'error'): string {
+  if (value === 'error') return '错误';
+  if (value === 'warning') return '警告';
+  return '提示';
 }
