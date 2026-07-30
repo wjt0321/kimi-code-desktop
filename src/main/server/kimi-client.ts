@@ -1,17 +1,25 @@
 import {
+  DesktopSessionRuntimeSchema,
   DesktopSessionSchema,
   DesktopTaskSnapshotSchema,
   DesktopWorkspaceSchema,
   type ApprovalDecisionRequest,
+  type CompactSessionRequest,
   type CreateTaskRequest,
   type DesktopMessage,
   type DesktopModel,
   type DesktopSession,
+  type DesktopSessionRuntime,
   type DesktopTaskSnapshot,
   type DesktopWorkspace,
+  type ForkSessionRequest,
   type QuestionDismissRequest,
   type QuestionResponseRequest,
+  type RestoreSessionRequest,
+  type UndoSessionRequest,
+  type UpdateRuntimeRequest,
 } from '../../shared/contracts';
+import { LocalServiceRequestError } from './server-lifecycle';
 import { projectTranscript } from './transcript-projector';
 
 interface ServerRequestPort {
@@ -43,9 +51,101 @@ export class KimiDesktopClient {
     return readItems(data).map(toDesktopSession);
   }
 
+
+  async listArchivedSessions(): Promise<DesktopSession[]> {
+    const data = await this.request('/sessions?page_size=80&archived_only=true');
+    return readItems(data).map(toDesktopSession);
+  }
+
   async listModels(): Promise<DesktopModel[]> {
     const data = await this.request('/models');
     return readItems(data).flatMap(toDesktopModel);
+  }
+
+
+  async getSessionRuntime(sessionId: string): Promise<DesktopSessionRuntime> {
+    const encodedSessionId = encodeURIComponent(sessionId);
+    let status: unknown;
+    try {
+      status = await this.request(`/sessions/${encodedSessionId}/status`);
+    } catch (error) {
+      if (isUnsupportedCapability(error)) return unsupportedSessionRuntime();
+      throw error;
+    }
+
+    let warnings: unknown[] = [];
+    try {
+      const warningData = readRecord(
+        await this.request(`/sessions/${encodedSessionId}/warnings`),
+        '本地服务返回了无效会话警告',
+      );
+      warnings = Array.isArray(warningData.warnings) ? warningData.warnings : [];
+    } catch (error) {
+      if (!isUnsupportedCapability(error)) throw error;
+    }
+
+    const record = readRecord(status, '本地服务返回了无效运行状态');
+    return DesktopSessionRuntimeSchema.parse({
+      available: true,
+      model: readString(record.model) || undefined,
+      thinkingLevel: readRequiredString(record.thinking_level, '本地服务返回了无效思考强度'),
+      permission: record.permission,
+      planMode: readRequiredBoolean(record.plan_mode, '本地服务返回了无效计划模式'),
+      swarmMode: readRequiredBoolean(record.swarm_mode, '本地服务返回了无效群组模式'),
+      contextTokens: readRequiredNonNegativeInteger(record.context_tokens, '本地服务返回了无效上下文用量'),
+      maxContextTokens: readRequiredNonNegativeInteger(record.max_context_tokens, '本地服务返回了无效上下文上限'),
+      contextUsage: record.context_usage,
+      warnings: warnings.map(toDesktopSessionWarning),
+    });
+  }
+
+  async updateSessionRuntime(input: UpdateRuntimeRequest): Promise<DesktopSessionRuntime> {
+    const agentConfig: Record<string, unknown> = {};
+    if (input.model !== undefined) agentConfig.model = input.model;
+    if (input.thinkingLevel !== undefined) agentConfig.thinking = input.thinkingLevel;
+    if (input.permission !== undefined) agentConfig.permission_mode = input.permission;
+    if (input.planMode !== undefined) agentConfig.plan_mode = input.planMode;
+    try {
+      await this.request(`/sessions/${encodeURIComponent(input.sessionId)}/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_config: agentConfig }),
+      });
+    } catch (error) {
+      if (isUnsupportedCapability(error)) throw new Error('当前 Kimi Code CLI 版本暂不支持运行策略控制。');
+      throw error;
+    }
+    return this.getSessionRuntime(input.sessionId);
+  }
+
+  async compactSession(input: CompactSessionRequest): Promise<void> {
+    await this.request(`/sessions/${encodeURIComponent(input.sessionId)}:compact`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input.instruction === undefined ? {} : { instruction: input.instruction }),
+    });
+  }
+
+  async undoSession(input: UndoSessionRequest): Promise<void> {
+    await this.request(`/sessions/${encodeURIComponent(input.sessionId)}:undo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count: input.count }),
+    });
+  }
+
+  async forkSession(input: ForkSessionRequest): Promise<DesktopSession> {
+    const data = await this.request(`/sessions/${encodeURIComponent(input.sessionId)}:fork`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input.title === undefined ? {} : { title: input.title }),
+    });
+    return toDesktopSession(data);
+  }
+
+  async restoreSession(input: RestoreSessionRequest): Promise<DesktopSession> {
+    const data = await this.request(`/sessions/${encodeURIComponent(input.sessionId)}:restore`, { method: 'POST' });
+    return toDesktopSession(data);
   }
 
   async getSession(sessionId: string): Promise<DesktopSession> {
@@ -163,7 +263,16 @@ function toDesktopModel(value: unknown): DesktopModel[] {
   const provider = readString(record?.provider);
   if (!id || !label || !provider) return [];
   const contextWindow = readRequiredPositiveInteger(record?.max_context_size);
-  return [{ id, label, provider, contextWindow }];
+  return [{
+    id,
+    label,
+    provider,
+    contextWindow,
+    capabilities: readStringArray(record?.capabilities),
+    supportEfforts: readStringArray(record?.support_efforts),
+    defaultEffort: readString(record?.default_effort),
+    adaptiveThinking: readBoolean(record?.adaptive_thinking),
+  }];
 }
 
 function toDesktopSession(value: unknown): DesktopSession {
@@ -184,6 +293,34 @@ function toDesktopSession(value: unknown): DesktopSession {
     permission: readPermission(config.permission_mode ?? config.permission),
     mainTurnActive: readBoolean(record.main_turn_active),
   });
+}
+
+
+function toDesktopSessionWarning(value: unknown): unknown {
+  const record = readRecord(value, '本地服务返回了无效会话警告');
+  return {
+    code: readRequiredString(record.code, '本地服务返回了无效会话警告'),
+    message: readRequiredString(record.message, '本地服务返回了无效会话警告'),
+    severity: record.severity,
+  };
+}
+
+function unsupportedSessionRuntime(): DesktopSessionRuntime {
+  return {
+    available: false,
+    thinkingLevel: 'off',
+    permission: 'manual',
+    planMode: false,
+    swarmMode: false,
+    contextTokens: 0,
+    maxContextTokens: 0,
+    contextUsage: 0,
+    warnings: [],
+  };
+}
+
+function isUnsupportedCapability(error: unknown): boolean {
+  return error instanceof LocalServiceRequestError && (error.status === 404 || error.status === 405);
 }
 
 function toDesktopMessage(value: unknown): DesktopMessage {
@@ -247,6 +384,13 @@ function readRequiredString(value: unknown, message: string): string {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.filter((item): item is string => typeof item === 'string');
+  return items.length === value.length ? items : undefined;
 }
 
 function readRequiredBoolean(value: unknown, message: string): boolean {

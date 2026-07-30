@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { LocalServiceRequestError } from './server-lifecycle';
 import { KimiDesktopClient } from './kimi-client';
 
 describe('KimiDesktopClient', () => {
@@ -74,6 +75,10 @@ describe('KimiDesktopClient', () => {
       label: 'Kimi K3',
       provider: 'kimi-code',
       contextWindow: 256000,
+      capabilities: ['thinking', 'tool_use'],
+      supportEfforts: undefined,
+      defaultEffort: undefined,
+      adaptiveThinking: undefined,
     }]);
     await client.submitPrompt('session-1', '请回复你好', 'kimi-code/k3');
 
@@ -203,5 +208,154 @@ it('renames and archives sessions through the current server action routes', asy
   });
   expect(request).toHaveBeenNthCalledWith(2, '/sessions/session%20%2F%201:archive', {
     method: 'POST',
+  });
+});
+
+
+describe('KimiDesktopClient runtime controls', () => {
+  it('maps live runtime status, warnings, archived sessions, and model effort metadata', async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path === '/sessions/s1/status') return {
+        busy: false,
+        model: 'kimi-code/k3',
+        thinking_level: 'high',
+        permission: 'auto',
+        plan_mode: true,
+        swarm_mode: false,
+        context_tokens: 12000,
+        max_context_tokens: 128000,
+        context_usage: 0.09375,
+      };
+      if (path === '/sessions/s1/warnings') return {
+        warnings: [{ code: 'agents-md-oversized', message: '规则文件过大', severity: 'warning' }],
+      };
+      if (path === '/sessions?page_size=80&archived_only=true') return {
+        items: [{
+          id: 'archived-1',
+          title: '旧任务',
+          updated_at: '2026-07-30T00:00:00.000Z',
+          busy: false,
+          archived: true,
+          metadata: { cwd: 'C:\\repo' },
+          agent_config: { model: '' },
+        }],
+      };
+      if (path === '/models') return {
+        items: [{
+          provider: 'kimi-code',
+          model: 'kimi-code/k3',
+          display_name: 'Kimi K3',
+          max_context_size: 128000,
+          capabilities: ['thinking'],
+          support_efforts: ['low', 'high'],
+          default_effort: 'high',
+          adaptive_thinking: true,
+        }],
+      };
+      throw new Error(`unexpected path ${path}`);
+    });
+    const client = new KimiDesktopClient({ request });
+
+    await expect(client.getSessionRuntime('s1')).resolves.toMatchObject({
+      available: true,
+      model: 'kimi-code/k3',
+      thinkingLevel: 'high',
+      permission: 'auto',
+      planMode: true,
+      contextTokens: 12000,
+      warnings: [{ code: 'agents-md-oversized' }],
+    });
+    await expect(client.listArchivedSessions()).resolves.toMatchObject([{ id: 'archived-1', title: '旧任务' }]);
+    await expect(client.listModels()).resolves.toMatchObject([{
+      supportEfforts: ['low', 'high'],
+      defaultEffort: 'high',
+      adaptiveThinking: true,
+    }]);
+  });
+
+  it('updates runtime fields and reads back the server-confirmed state', async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path === '/sessions/s1/profile') return { id: 's1' };
+      if (path === '/sessions/s1/status') return {
+        busy: false,
+        model: 'kimi-code/k3',
+        thinking_level: 'max',
+        permission: 'auto',
+        plan_mode: true,
+        swarm_mode: false,
+        context_tokens: 10,
+        max_context_tokens: 100,
+        context_usage: 0.1,
+      };
+      if (path === '/sessions/s1/warnings') return { warnings: [] };
+      throw new Error(`unexpected path ${path}`);
+    });
+    const client = new KimiDesktopClient({ request });
+
+    await expect(client.updateSessionRuntime({
+      sessionId: 's1',
+      model: 'kimi-code/k3',
+      thinkingLevel: 'max',
+      permission: 'auto',
+      planMode: true,
+    })).resolves.toMatchObject({ thinkingLevel: 'max', permission: 'auto', planMode: true });
+
+    expect(request).toHaveBeenNthCalledWith(1, '/sessions/s1/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agent_config: {
+          model: 'kimi-code/k3',
+          thinking: 'max',
+          permission_mode: 'auto',
+          plan_mode: true,
+        },
+      }),
+    });
+  });
+
+  it('sends compact, undo, fork, and restore requests to their action routes', async () => {
+    const session = {
+      id: 'forked-1',
+      title: '派生任务',
+      updated_at: '2026-07-30T00:00:00.000Z',
+      busy: false,
+      metadata: { cwd: 'C:\\repo' },
+      agent_config: { model: '' },
+    };
+    const request = vi.fn(async (path: string) => path.includes(':fork') || path.includes(':restore') ? session : {});
+    const client = new KimiDesktopClient({ request });
+
+    await client.compactSession({ sessionId: 's / 1', instruction: '保留关键决策' });
+    await client.undoSession({ sessionId: 's / 1', count: 1 });
+    await expect(client.forkSession({ sessionId: 's / 1', title: '派生任务' })).resolves.toMatchObject({ id: 'forked-1' });
+    await expect(client.restoreSession({ sessionId: 's / 1' })).resolves.toMatchObject({ id: 'forked-1' });
+
+    expect(request).toHaveBeenNthCalledWith(1, '/sessions/s%20%2F%201:compact', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ instruction: '保留关键决策' }),
+    }));
+    expect(request).toHaveBeenNthCalledWith(2, '/sessions/s%20%2F%201:undo', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ count: 1 }),
+    }));
+    expect(request).toHaveBeenNthCalledWith(3, '/sessions/s%20%2F%201:fork', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ title: '派生任务' }),
+    }));
+    expect(request).toHaveBeenNthCalledWith(4, '/sessions/s%20%2F%201:restore', { method: 'POST' });
+  });
+
+  it('degrades only unsupported runtime reads and preserves other failures', async () => {
+    const unsupported = new KimiDesktopClient({
+      request: vi.fn(async () => { throw new LocalServiceRequestError('route not found', 404); }),
+    });
+    await expect(unsupported.getSessionRuntime('s1')).resolves.toMatchObject({ available: false });
+    await expect(unsupported.updateSessionRuntime({ sessionId: 's1', planMode: true })).rejects.toThrow('当前 Kimi Code CLI 版本暂不支持运行策略控制');
+
+    const broken = new KimiDesktopClient({
+      request: vi.fn(async () => { throw new LocalServiceRequestError('server failure', 500); }),
+    });
+    await expect(broken.getSessionRuntime('s1')).rejects.toThrow('server failure');
   });
 });
