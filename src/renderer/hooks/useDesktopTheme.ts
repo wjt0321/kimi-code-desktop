@@ -28,12 +28,12 @@ export function useDesktopTheme() {
   }, []);
 
   const setTheme = useCallback(async (preference: ThemePreference) => {
-    if (typeof window.desktop.setTheme !== 'function') return theme;
+    if (typeof window.desktop.setTheme !== 'function') return initialTheme;
     const next = await window.desktop.setTheme({ preference });
     applyTheme(next);
     setThemeSnapshot(next);
     return next;
-  }, [theme]);
+  }, []);
 
   return { theme, setTheme };
 }
