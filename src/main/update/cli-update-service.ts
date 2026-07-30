@@ -127,13 +127,13 @@ export class CliUpdateService {
 
     const rolloutEligible =
       cached.manifest === null || isRolloutEligible(cached.manifest, cached.deviceId, now);
-    const updateAvailable =
-      compareStableVersions(currentVersion, latestVersion) < 0 && rolloutEligible;
+    const newerVersionExists = compareStableVersions(currentVersion, latestVersion) < 0;
+    const updateAvailable = newerVersionExists && rolloutEligible;
     if (!updateAvailable) {
       return this.#setSnapshot({
         phase: 'current',
         currentVersion,
-        latestVersion,
+        latestVersion: newerVersionExists ? currentVersion : latestVersion,
         checkedAt: cached.checkedAt ?? undefined,
         canAutoInstall: false,
         updateAvailable: false,

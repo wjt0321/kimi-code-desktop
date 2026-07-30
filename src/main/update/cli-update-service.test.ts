@@ -117,7 +117,7 @@ describe('CliUpdateService checks', () => {
     await expect(service.check(readyCli(), true)).resolves.toMatchObject({
       phase: 'current',
       updateAvailable: false,
-      latestVersion: '0.31.0',
+      latestVersion: '0.30.0',
     });
   });
 
@@ -232,4 +232,3 @@ describe('CliUpdateService installation', () => {
     await expect(second).resolves.toMatchObject({ phase: 'succeeded' });
   });
 });
-

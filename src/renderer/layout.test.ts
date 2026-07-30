@@ -13,4 +13,11 @@ describe('workbench layout', () => {
     expect(styles).toMatch(/\.workbench-sidebar\s*\{[^}]*min-height:\s*0;/);
     expect(styles).toMatch(/\.workbench-canvas\s*\{[^}]*min-height:\s*0;/);
   });
+
+  it('keeps primary workbench copy and branding readable in light mode', () => {
+    expect(styles).toContain("html[data-theme='light'] .workbench-heading h1");
+    expect(styles).toContain("html[data-theme='light'] .workbench-empty h2");
+    expect(styles).toContain("html[data-theme='light'] .sidebar-brand img");
+    expect(styles).toContain("html[data-theme='light'] .empty-mark");
+  });
 });

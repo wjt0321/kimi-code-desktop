@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { z } from 'zod';
 
+import { applyBootstrapTheme } from './bootstrap-theme';
+
 import {
   ApprovalDecisionRequestSchema,
   CompactSessionRequestSchema,
@@ -53,8 +55,11 @@ import {
   type UpdateRuntimeRequest,
 } from '../shared/contracts';
 
-const bootstrapTheme = process.argv.find((value) => value.startsWith('--kimi-desktop-theme='))?.split('=')[1];
-if (bootstrapTheme === 'light' || bootstrapTheme === 'dark') document.documentElement.dataset.theme = bootstrapTheme;
+if (!applyBootstrapTheme(document.documentElement, process.argv)) {
+  window.addEventListener('DOMContentLoaded', () => {
+    applyBootstrapTheme(document.documentElement, process.argv);
+  }, { once: true });
+}
 
 function parseStatus(value: unknown): DesktopStatus {
   return DesktopStatusSchema.parse(value);
