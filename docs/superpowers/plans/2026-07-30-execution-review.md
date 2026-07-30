@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- 只修改独立仓库 `D:\mydev\kimi-code\desktop`，不得提交到上游 `MoonshotAI/kimi-code`。
+- 只修改独立的桌面端仓库，不得提交到上游 `MoonshotAI/kimi-code`。
 - 优先支持 Windows x64，所有主要用户文案使用中文。
 - 保持 CLI 0.30.0 核心能力兼容，通过字段能力检测支持 0.31.0 及后续版本。
 - 不直接依赖 `@moonshot-ai/transcript`、上游 Monorepo 内部包或 Vue Kimi Web。
@@ -766,7 +766,7 @@ git commit -m "chore: prepare 0.4.0 release"
 git status --short
 git log --oneline main..HEAD
 git diff --stat main...HEAD
-git -C D:\mydev\kimi-code status --short
+git -C <上游仓库路径> status --short
 ```
 
 Expected: desktop tree clean, focused commits only, no scratch files, parent upstream working tree unchanged.
