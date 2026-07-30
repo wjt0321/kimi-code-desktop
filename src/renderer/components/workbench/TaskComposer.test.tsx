@@ -31,7 +31,9 @@ describe('TaskComposer', () => {
     await user.type(screen.getByLabelText('向 Kimi Code 发送任务'), '请检查项目');
     expect((screen.getByRole('button', { name: '发送' }) as HTMLButtonElement).disabled).toBe(true);
 
-    await user.selectOptions(screen.getByLabelText('选择模型'), 'kimi-code/k3');
+    await user.click(screen.getByRole('combobox', { name: '选择模型' }));
+    expect(screen.getByRole('listbox')).not.toBeNull();
+    await user.click(screen.getByRole('option', { name: /Kimi K3/ }));
     expect(onModelChange).toHaveBeenCalledWith('kimi-code/k3');
   });
 

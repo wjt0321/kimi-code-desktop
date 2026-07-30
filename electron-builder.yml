@@ -1,10 +1,13 @@
 appId: io.github.wjt0321.kimi-code-desktop
 productName: Kimi Code Desktop
 directories:
-  output: release
+  output: release/${version}
 files:
   - dist/**
   - package.json
+extraResources:
+  - from: build/kimi-code.ico
+    to: kimi-code.ico
 win:
   icon: build/kimi-code.ico
   target:

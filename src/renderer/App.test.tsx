@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -47,6 +47,8 @@ const snapshotWithApproval: DesktopTaskSnapshot = {
   }],
 };
 
+let closeRequestedListener: (() => void) | undefined;
+
 const desktopApi = {
   status: vi.fn<() => Promise<DesktopStatus>>(),
   refreshCli: vi.fn<() => Promise<DesktopStatus>>(),
@@ -68,6 +70,8 @@ const desktopApi = {
   respondApproval: vi.fn(),
   respondQuestion: vi.fn(),
   dismissQuestion: vi.fn(),
+  confirmClose: vi.fn<() => void>(),
+  onCloseRequested: vi.fn<(listener: () => void) => () => void>(),
   onStatus: vi.fn<(listener: (status: DesktopStatus) => void) => () => void>(),
   onTaskEvent: vi.fn<(listener: (event: { sessionId: string; kind: 'refresh'; seq?: number }) => void) => () => void>(),
 };
@@ -90,12 +94,31 @@ beforeEach(() => {
   desktopApi.createTask.mockResolvedValue(null);
   desktopApi.submitPrompt.mockResolvedValue();
   desktopApi.abortSession.mockResolvedValue();
+  closeRequestedListener = undefined;
+  desktopApi.onCloseRequested.mockImplementation((listener) => {
+    closeRequestedListener = listener;
+    return () => { closeRequestedListener = undefined; };
+  });
   desktopApi.onStatus.mockReturnValue(() => undefined);
   desktopApi.onTaskEvent.mockReturnValue(() => undefined);
   Object.defineProperty(window, 'desktop', { configurable: true, value: desktopApi });
 });
 
 describe('App', () => {
+
+  it('使用与工作台一致的确认框处理退出请求', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    act(() => closeRequestedListener?.());
+    expect(screen.getByRole('dialog', { name: '退出 Kimi Code Desktop' })).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: '取消' }));
+    expect(desktopApi.confirmClose).not.toHaveBeenCalled();
+
+    act(() => closeRequestedListener?.());
+    await user.click(screen.getByRole('button', { name: '退出应用' }));
+    expect(desktopApi.confirmClose).toHaveBeenCalledOnce();
+  });
   it('在 CLI 就绪但服务未连接时提供启动本地服务操作', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -156,7 +179,8 @@ describe('App', () => {
     expect((prompt as HTMLTextAreaElement).disabled).toBe(false);
     await user.type(prompt, '解释当前任务');
     expect((screen.getByRole('button', { name: '发送' }) as HTMLButtonElement).disabled).toBe(true);
-    await user.selectOptions(screen.getByLabelText('选择模型'), 'kimi-code/k3');
+    await user.click(screen.getByRole('combobox', { name: '选择模型' }));
+    await user.click(screen.getByRole('option', { name: /Kimi K3/ }));
     await user.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {

@@ -22,6 +22,8 @@ export interface DesktopApi {
   chooseCliExecutable(): Promise<DesktopStatus>;
   startServer(): Promise<DesktopStatus>;
   stopServer(): Promise<DesktopStatus>;
+  confirmClose(): void;
+  onCloseRequested(listener: () => void): () => void;
   listWorkspaces(): Promise<DesktopWorkspace[]>;
   chooseWorkspaceFolder(): Promise<string | null>;
   createWorkspace(input: WorkspaceRootRequest): Promise<DesktopWorkspace>;

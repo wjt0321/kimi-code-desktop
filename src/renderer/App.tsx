@@ -1,24 +1,42 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { WorkbenchShell } from './components/workbench/WorkbenchShell';
 import { CliSetupView } from './components/CliSetupView';
 import { CommandPalette } from './components/CommandPalette';
+import { ExitDialog } from './components/ExitDialog';
 import { useDesktopStatus } from './hooks/useDesktopStatus';
 import { useWorkbench } from './hooks/useWorkbench';
 
 export function App() {
   const [newTaskRequest, setNewTaskRequest] = useState(0);
+  const [exitDialogOpen, setExitDialogOpen] = useState(false);
   const desktop = useDesktopStatus();
   const { status } = desktop;
   const workbench = useWorkbench(status.server.kind === 'connected');
 
+  useEffect(() => window.desktop.onCloseRequested(() => setExitDialogOpen(true)), []);
+
+  const exitDialog = (
+    <ExitDialog
+      open={exitDialogOpen}
+      onCancel={() => setExitDialogOpen(false)}
+      onConfirm={() => {
+        setExitDialogOpen(false);
+        window.desktop.confirmClose();
+      }}
+    />
+  );
+
   if (status.cli.kind !== 'ready') {
     return (
-      <CliSetupView
-        cli={status.cli}
-        onRefresh={() => void desktop.refreshCli()}
-        onChoose={() => void desktop.chooseCliExecutable()}
-      />
+      <>
+        <CliSetupView
+          cli={status.cli}
+          onRefresh={() => void desktop.refreshCli()}
+          onChoose={() => void desktop.chooseCliExecutable()}
+        />
+        {exitDialog}
+      </>
     );
   }
 
@@ -65,6 +83,7 @@ export function App() {
         onChoose={() => void desktop.chooseCliExecutable()}
         onCreateTask={() => setNewTaskRequest((value) => value + 1)}
       />
+      {exitDialog}
     </>
   );
 }

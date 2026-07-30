@@ -1,6 +1,6 @@
 {
   "name": "kimi-code-desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "面向 Windows 的非官方 Kimi Code 桌面客户端，直接使用系统已安装的 CLI。",
   "type": "module",
@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.1.23",
+    "@radix-ui/react-select": "2.3.7",
     "cmdk": "1.1.1",
     "lucide-react": "1.27.0",
     "react": "19.2.8",

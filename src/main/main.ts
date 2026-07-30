@@ -22,6 +22,7 @@ import { KimiDesktopClient } from './server/kimi-client';
 import { LiveTaskFeed } from './server/live-task-feed';
 import { KimiServerLifecycle } from './server/server-lifecycle';
 import { createRuntimeShutdown } from './runtime-shutdown';
+import { createCloseRequestController, resolveWindowIconPath } from './window-behavior';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
@@ -33,6 +34,7 @@ export function createMainWindow(onClosed?: () => void): BrowserWindow {
     minHeight: 640,
     show: false,
     backgroundColor: '#101216',
+    icon: resolveWindowIconPath(app.isPackaged, process.resourcesPath, currentDir),
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
@@ -59,7 +61,17 @@ export function createMainWindow(onClosed?: () => void): BrowserWindow {
   window.webContents.on('will-navigate', (event, url) => {
     if (!isTrustedNavigation(url, rendererUrl)) event.preventDefault();
   });
+  const closeController = createCloseRequestController(
+    () => window.webContents.send('desktop:close-requested'),
+    () => window.close(),
+  );
+  const confirmClose = (event: Electron.IpcMainEvent) => {
+    if (event.sender === window.webContents) closeController.confirmClose();
+  };
+  ipcMain.on('desktop:confirm-close', confirmClose);
+  window.on('close', closeController.handleClose);
   window.on('closed', () => {
+    ipcMain.off('desktop:confirm-close', confirmClose);
     if (BrowserWindow.getAllWindows().length === 0) onClosed?.();
   });
   void window.loadURL(rendererUrl);
@@ -141,6 +153,7 @@ function registerIpc(controller: DesktopController, client: KimiDesktopClient): 
 }
 
 app.whenReady().then(async () => {
+  app.setAppUserModelId('io.github.wjt0321.kimi-code-desktop');
   Menu.setApplicationMenu(null);
   const lifecycle = new KimiServerLifecycle({ childFactory: createChildProcessFactory(), portProvider: getAvailablePort });
   const feed = new LiveTaskFeed({ openSocket: () => lifecycle.openEventSocket() });

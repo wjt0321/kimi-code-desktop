@@ -79,12 +79,21 @@ function subscribeTask(listener: (event: DesktopTaskEvent) => void): () => void 
   return () => ipcRenderer.removeListener(eventName, handler);
 }
 
+function subscribeCloseRequested(listener: () => void): () => void {
+  const eventName = 'desktop:close-requested';
+  const handler = () => listener();
+  ipcRenderer.on(eventName, handler);
+  return () => ipcRenderer.removeListener(eventName, handler);
+}
+
 contextBridge.exposeInMainWorld('desktop', {
   status: () => ipcRenderer.invoke('desktop:status').then(parseStatus),
   refreshCli: () => ipcRenderer.invoke('desktop:refresh-cli').then(parseStatus),
   chooseCliExecutable: () => ipcRenderer.invoke('desktop:choose-cli-executable').then(parseStatus),
   startServer: () => ipcRenderer.invoke('desktop:start-server').then(parseStatus),
   stopServer: () => ipcRenderer.invoke('desktop:stop-server').then(parseStatus),
+  confirmClose: () => ipcRenderer.send('desktop:confirm-close'),
+  onCloseRequested: subscribeCloseRequested,
   listWorkspaces: () => ipcRenderer.invoke('desktop:list-workspaces').then(parseWorkspaces),
   chooseWorkspaceFolder: () => ipcRenderer.invoke('desktop:choose-workspace-folder').then(parseFolder),
   createWorkspace: (input: { root: string }) => ipcRenderer.invoke('desktop:create-workspace', WorkspaceRootRequestSchema.parse(input)).then(parseWorkspace),

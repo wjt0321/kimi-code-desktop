@@ -1,7 +1,8 @@
-import { ArrowUp, Bot, ChevronDown, LoaderCircle, SquareTerminal } from 'lucide-react';
+import { ArrowUp, LoaderCircle, SquareTerminal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { DesktopModel } from '../../../shared/contracts';
+import { ModelPicker } from './ModelPicker';
 
 interface TaskComposerProps {
   disabled: boolean;
@@ -17,7 +18,6 @@ export function TaskComposer({ disabled, busy, models, selectedModelId, onModelC
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const canSend = !disabled && !submitting && text.trim().length > 0 && selectedModelId !== undefined;
-  const selectedModel = models.find((model) => model.id === selectedModelId);
 
   useEffect(() => {
     const input = inputRef.current;
@@ -67,14 +67,7 @@ export function TaskComposer({ disabled, busy, models, selectedModelId, onModelC
         />
         <footer>
           <div className="composer-controls">
-            <label className="model-picker" title={selectedModel?.id}>
-              <Bot size={13} />
-              <select aria-label="选择模型" value={selectedModelId ?? ''} disabled={disabled || submitting || models.length === 0} onChange={(event) => onModelChange(event.target.value)}>
-                <option value="" disabled>{models.length === 0 ? '没有可用模型' : '选择模型'}</option>
-                {models.map((model) => <option key={model.id} value={model.id}>{model.label} · {model.provider}</option>)}
-              </select>
-              <ChevronDown size={12} />
-            </label>
+            <ModelPicker models={models} value={selectedModelId} disabled={disabled || submitting || models.length === 0} onValueChange={onModelChange} />
             <span className="composer-mode"><SquareTerminal size={12} />本机执行</span>
           </div>
           <span className="task-composer__hint">{submitting ? '正在发送…' : selectedModelId ? 'Enter 发送 · Ctrl+Enter 换行' : '请先选择模型'}</span>

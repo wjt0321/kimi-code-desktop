@@ -22,8 +22,8 @@ Kimi Code Desktop 是系统级 CLI 的桌面外壳，而不是某个代码仓库
 - **任务管理**：创建、搜索、切换、重命名和归档任务。
 - **执行时间线**：展示用户输入、助手回复、思考过程、工具调用、工具结果和运行状态。
 - **任务交互**：处理审批、问题、待办和子任务活动。
-- **模型选择**：从本地 Kimi Code 服务读取可用模型，并为任务选择模型。
-- **运行控制**：启动、连接、停止本机服务，以及停止正在运行的任务。
+- **模型选择**：从本地 Kimi Code 服务读取可用模型，并通过与工作台一致的自定义菜单切换模型。
+- **运行控制**：启动、连接、停止本机服务，停止正在运行的任务，并在退出应用前明确确认。
 - **中文界面**：工作台、设置、错误提示和主要交互均使用中文。
 - **快捷操作**：`Enter` 发送，`Ctrl + Enter` 换行，`Ctrl + N` 新建任务，`Ctrl + B` 切换侧边栏，`Ctrl + K` 打开命令面板。
 
@@ -82,7 +82,7 @@ pnpm build:dir
 可执行文件位于：
 
 ```text
-release/win-unpacked/Kimi Code Desktop.exe
+release/<版本号>/win-unpacked/Kimi Code Desktop.exe
 ```
 
 生成 NSIS 安装程序：
@@ -91,7 +91,7 @@ release/win-unpacked/Kimi Code Desktop.exe
 pnpm build
 ```
 
-安装程序输出到 `release/`。
+安装程序与免安装目录按版本输出到 `release/<版本号>/`，避免 Windows 对同路径 EXE 沿用旧图标缓存。
 
 ## 常见问题
 
