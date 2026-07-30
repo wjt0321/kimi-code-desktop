@@ -99,4 +99,3 @@ function runningLabel(phase: string): string {
   if (phase === 'streaming') return 'Kimi Code 正在生成回复';
   return 'Kimi Code 正在处理任务';
 }
-

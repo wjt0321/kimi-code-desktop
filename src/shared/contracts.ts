@@ -409,5 +409,3 @@ export const QuestionDismissRequestSchema = z.object({
 });
 
 export type QuestionDismissRequest = z.infer<typeof QuestionDismissRequestSchema>;
-
-
