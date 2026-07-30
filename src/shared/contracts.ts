@@ -27,6 +27,9 @@ export type DesktopStatus = z.infer<typeof DesktopStatusSchema>;
 
 export const SessionIdSchema = z.string().min(1).max(200);
 
+export const DesktopPermissionModeSchema = z.enum(['manual', 'yolo', 'auto']);
+export type DesktopPermissionMode = z.infer<typeof DesktopPermissionModeSchema>;
+
 export const DesktopWorkspaceSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -53,7 +56,7 @@ export const DesktopSessionSchema = z.object({
   pendingInteraction: z.enum(['none', 'approval', 'question']).optional(),
   lastTurnReason: z.enum(['completed', 'cancelled', 'failed']).optional(),
   model: z.string().min(1).optional(),
-  permission: z.enum(['manual', 'yolo', 'auto']).optional(),
+  permission: DesktopPermissionModeSchema.optional(),
   mainTurnActive: z.boolean().optional(),
 });
 
@@ -73,9 +76,70 @@ export const DesktopModelSchema = z.object({
   label: z.string().min(1),
   provider: z.string().min(1),
   contextWindow: z.number().int().positive().optional(),
+  capabilities: z.array(z.string()).optional(),
+  supportEfforts: z.array(z.string().min(1)).optional(),
+  defaultEffort: z.string().min(1).optional(),
+  adaptiveThinking: z.boolean().optional(),
 });
 
 export type DesktopModel = z.infer<typeof DesktopModelSchema>;
+
+export const DesktopSessionWarningSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  severity: z.enum(['info', 'warning', 'error']),
+});
+export type DesktopSessionWarning = z.infer<typeof DesktopSessionWarningSchema>;
+
+export const DesktopSessionRuntimeSchema = z.object({
+  available: z.boolean(),
+  model: z.string().min(1).optional(),
+  thinkingLevel: z.string().min(1),
+  permission: DesktopPermissionModeSchema,
+  planMode: z.boolean(),
+  swarmMode: z.boolean(),
+  contextTokens: z.number().int().nonnegative(),
+  maxContextTokens: z.number().int().nonnegative(),
+  contextUsage: z.number().min(0).max(1),
+  warnings: z.array(DesktopSessionWarningSchema),
+});
+export type DesktopSessionRuntime = z.infer<typeof DesktopSessionRuntimeSchema>;
+
+export const UpdateRuntimeRequestSchema = z.object({
+  sessionId: SessionIdSchema,
+  model: z.string().trim().min(1).max(200).optional(),
+  thinkingLevel: z.string().trim().min(1).max(80).optional(),
+  permission: DesktopPermissionModeSchema.optional(),
+  planMode: z.boolean().optional(),
+}).refine(({ model, thinkingLevel, permission, planMode }) =>
+  model !== undefined || thinkingLevel !== undefined || permission !== undefined || planMode !== undefined,
+  '必须提供至少一项运行策略更新',
+);
+export type UpdateRuntimeRequest = z.infer<typeof UpdateRuntimeRequestSchema>;
+
+export const CompactSessionRequestSchema = z.object({
+  sessionId: SessionIdSchema,
+  instruction: z.string().trim().min(1).max(10_000).optional(),
+});
+export type CompactSessionRequest = z.infer<typeof CompactSessionRequestSchema>;
+
+export const UndoSessionRequestSchema = z.object({
+  sessionId: SessionIdSchema,
+  count: z.literal(1).default(1),
+});
+export type UndoSessionRequest = z.infer<typeof UndoSessionRequestSchema>;
+
+export const ForkSessionRequestSchema = z.object({
+  sessionId: SessionIdSchema,
+  title: z.string().trim().min(1).max(200).optional(),
+});
+export type ForkSessionRequest = z.infer<typeof ForkSessionRequestSchema>;
+
+export const RestoreSessionRequestSchema = z.object({
+  sessionId: SessionIdSchema,
+});
+export type RestoreSessionRequest = z.infer<typeof RestoreSessionRequestSchema>;
+
 
 export const PromptRequestSchema = z.object({
   sessionId: SessionIdSchema,
@@ -201,7 +265,7 @@ export type DesktopQuestion = z.infer<typeof DesktopQuestionSchema>;
 
 export const DesktopTaskStatusSchema = z.object({
   model: z.string().min(1).optional(),
-  permission: z.enum(['manual', 'yolo', 'auto']).optional(),
+  permission: DesktopPermissionModeSchema.optional(),
   phase: z.enum(['idle', 'running', 'streaming', 'tool', 'awaiting_approval', 'interrupted', 'ended', 'unknown']),
   contextUsage: z.number().min(0).max(1).optional(),
 });
