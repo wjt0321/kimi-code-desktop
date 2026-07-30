@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import {
   Archive,
+  ArrowUpCircle,
   Bot,
   BrainCircuit,
   ChevronDown,
@@ -23,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { CreateTaskRequest, DesktopCapabilitySnapshot, DesktopDiffTarget, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopThemeSnapshot, DesktopWorkspace, ThemePreference, UpdateRuntimeRequest } from '../../../shared/contracts';
+import type { CreateTaskRequest, DesktopCapabilitySnapshot, DesktopCliUpdateSnapshot, DesktopDiffTarget, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopThemeSnapshot, DesktopWorkspace, ThemePreference, UpdateRuntimeRequest } from '../../../shared/contracts';
 import kimiBanner from '../../assets/kimi-banner-dark.svg';
 import kimiIcon from '../../assets/kimi-icon.svg';
 import { ArchivedSessionsDialog } from './ArchivedSessionsDialog';
@@ -59,7 +60,10 @@ interface WorkbenchShellProps {
   status: DesktopStatus;
   capabilities?: DesktopCapabilitySnapshot;
   theme?: DesktopThemeSnapshot;
+  cliUpdate?: DesktopCliUpdateSnapshot;
   onThemeChange?(preference: ThemePreference): void;
+  onCheckCliUpdate?(): void;
+  onInstallCliUpdate?(): void;
   workspaces: DesktopWorkspace[];
   models: DesktopModel[];
   selectedModelId: string | undefined;
@@ -111,7 +115,10 @@ export function WorkbenchShell({
   status,
   capabilities = fallbackCapabilities,
   theme = { preference: 'system', resolved: 'dark' },
+  cliUpdate = { phase: 'idle', canAutoInstall: false, updateAvailable: false },
   onThemeChange = () => {},
+  onCheckCliUpdate = () => {},
+  onInstallCliUpdate = () => {},
   workspaces,
   models,
   selectedModelId,
@@ -341,6 +348,12 @@ export function WorkbenchShell({
         </section>
 
         <footer className={`runtime-card runtime-card--${status.server.kind}`}>
+          {cliUpdate.updateAvailable ? (
+            <button type="button" className="runtime-update" onClick={() => setSettingsOpen(true)}>
+              <ArrowUpCircle size={13} />
+              <span>CLI {cliUpdate.latestVersion ?? '新版本'} 可升级</span>
+            </button>
+          ) : null}
           <button type="button" className="runtime-card__summary" onClick={() => setServiceDetailsOpen((value) => !value)}>
             <span className="runtime-card__signal"><span /></span>
             <span><strong>{statusSummary.service.label}</strong><small>{statusSummary.cli.label}</small></span>
@@ -413,7 +426,7 @@ export function WorkbenchShell({
       </section>
 
       <NewTaskDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onCreateTask={onCreateTask} onChooseFolder={onChooseWorkspaceFolder} onCreateWorkspace={onCreateWorkspace} />
-      <SettingsDialog open={settingsOpen} status={status} capabilities={capabilities} theme={theme} onThemeChange={onThemeChange} onRefreshCapabilities={onRefreshCapabilities} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} status={status} capabilities={capabilities} theme={theme} cliUpdate={cliUpdate} onThemeChange={onThemeChange} onCheckCliUpdate={onCheckCliUpdate} onInstallCliUpdate={onInstallCliUpdate} onRefreshCapabilities={onRefreshCapabilities} onOpenChange={setSettingsOpen} />
 
 
       <SessionActionDialogs action={sessionDialogAction} sessionTitle={selectedSession?.title ?? ''} onClose={() => setSessionDialogAction(undefined)} onUndo={onUndoTask} onCompact={onCompactTask} onFork={onForkTask} />

@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { Command } from 'cmdk';
 import { useEffect, useState } from 'react';
 
-import type { DesktopStatus } from '../../shared/contracts';
+import type { DesktopStatus, DesktopThemeSnapshot, ThemePreference } from '../../shared/contracts';
 
 interface CommandPaletteProps {
   status: DesktopStatus;
@@ -21,6 +21,9 @@ interface CommandPaletteProps {
   onOpenCompact(): void;
   onOpenFork(): void;
   onOpenArchived(): void;
+  theme?: DesktopThemeSnapshot;
+  onThemeChange?(preference: ThemePreference): void;
+  onCheckCliUpdate?(): void;
 }
 
 export function CommandPalette({
@@ -40,6 +43,9 @@ export function CommandPalette({
   onOpenCompact,
   onOpenFork,
   onOpenArchived,
+  theme = { preference: 'system', resolved: 'dark' },
+  onThemeChange = () => {},
+  onCheckCliUpdate = () => {},
 }: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
 
@@ -80,7 +86,13 @@ export function CommandPalette({
                 <Command.Item disabled={!hasSession || sessionBusy} onSelect={() => select(onOpenFork)}>派生新任务…</Command.Item>
                 <Command.Item disabled={!connected} onSelect={() => select(onOpenArchived)}>查看已归档任务</Command.Item>
               </Command.Group>
-              <Command.Group heading="工作台">
+              <Command.Group heading="外观与更新">
+                <Command.Item onSelect={() => select(() => onThemeChange('system'))}>{theme.preference === 'system' ? '✓ ' : ''}跟随系统主题</Command.Item>
+                <Command.Item onSelect={() => select(() => onThemeChange('light'))}>{theme.preference === 'light' ? '✓ ' : ''}使用浅色主题</Command.Item>
+                <Command.Item onSelect={() => select(() => onThemeChange('dark'))}>{theme.preference === 'dark' ? '✓ ' : ''}使用深色主题</Command.Item>
+                <Command.Item onSelect={() => select(onCheckCliUpdate)}>检查 CLI 更新</Command.Item>
+              </Command.Group>
+                            <Command.Group heading="工作台">
                 <Command.Item disabled={!connected} onSelect={() => select(onCreateTask)}>新建任务</Command.Item>
                 <Command.Item disabled={!ready || active} onSelect={() => select(onStart)}>启动本地服务</Command.Item>
                 <Command.Item disabled={!active} onSelect={() => select(onStop)}>关闭本地服务</Command.Item>

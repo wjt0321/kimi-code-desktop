@@ -77,6 +77,7 @@ describe('WorkbenchShell', () => {
     render(
       <WorkbenchShell
         status={status}
+        cliUpdate={{ phase: 'available', currentVersion: '0.30.0', latestVersion: '0.31.0', installSource: 'npm-global', installCommand: 'npm install --global @moonshot-ai/kimi-code@0.31.0', canAutoInstall: true, updateAvailable: true }}
         workspaces={[workspace]}
         models={models}
         selectedModelId={models[0].id}
@@ -103,6 +104,7 @@ describe('WorkbenchShell', () => {
     expect(screen.getByText('计划模式')).not.toBeNull();
     expect(screen.getByRole('button', { name: '思考强度：高' })).not.toBeNull();
     expect(screen.queryByRole('button', { name: '项目' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'CLI 0.31.0 可升级' })).not.toBeNull();
   });
 
   it('opens a local folder as a first-class workspace entry when none exists', async () => {

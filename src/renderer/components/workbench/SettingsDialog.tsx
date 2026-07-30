@@ -17,16 +17,21 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { CliUpdateDialog } from './CliUpdateDialog';
+import { CliUpdateSection } from './CliUpdateSection';
 import { ThemeControl } from './ThemeControl';
 
-import type { DesktopCapabilitySnapshot, DesktopCapabilityState, DesktopStatus, DesktopThemeSnapshot, ThemePreference } from '../../../shared/contracts';
+import type { DesktopCapabilitySnapshot, DesktopCapabilityState, DesktopCliUpdateSnapshot, DesktopStatus, DesktopThemeSnapshot, ThemePreference } from '../../../shared/contracts';
 
 interface SettingsDialogProps {
   open: boolean;
   status: DesktopStatus;
   capabilities: DesktopCapabilitySnapshot;
   theme?: DesktopThemeSnapshot;
+  cliUpdate?: DesktopCliUpdateSnapshot;
   onThemeChange?(preference: ThemePreference): void;
+  onCheckCliUpdate?(): void;
+  onInstallCliUpdate?(): void;
   onRefreshCapabilities(): void;
   onOpenChange(open: boolean): void;
 }
@@ -34,8 +39,20 @@ interface SettingsDialogProps {
 const upstreamUrl = 'https://github.com/MoonshotAI/kimi-code';
 const projectUrl = 'https://github.com/wjt0321/kimi-code-desktop';
 
-export function SettingsDialog({ open, status, capabilities, theme = { preference: 'system', resolved: 'dark' }, onThemeChange = () => {}, onRefreshCapabilities, onOpenChange }: SettingsDialogProps) {
+export function SettingsDialog({
+  open,
+  status,
+  capabilities,
+  theme = { preference: 'system', resolved: 'dark' },
+  cliUpdate = { phase: 'idle', canAutoInstall: false, updateAvailable: false },
+  onThemeChange = () => {},
+  onCheckCliUpdate = () => {},
+  onInstallCliUpdate = () => {},
+  onRefreshCapabilities,
+  onOpenChange,
+}: SettingsDialogProps) {
   const [copied, setCopied] = useState<string>();
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const copy = async (value: string) => {
     await navigator.clipboard.writeText(value);
     setCopied(value);
@@ -64,6 +81,13 @@ export function SettingsDialog({ open, status, capabilities, theme = { preferenc
               <p className="settings-copy">选择浅色、深色，或跟随 Windows 系统主题实时变化。</p>
               <ThemeControl theme={theme} onChange={onThemeChange} />
             </section>
+            <CliUpdateSection
+              snapshot={cliUpdate}
+              onCheck={onCheckCliUpdate}
+              onRequestInstall={() => setUpdateDialogOpen(true)}
+              onCopyCommand={(command) => void copy(command)}
+            />
+
             <section className="settings-section settings-section--compatibility">
               <div className="settings-section__title-row">
                 <div className="settings-section__title"><Server size={16} /><span>版本与兼容性</span></div>
@@ -134,6 +158,13 @@ export function SettingsDialog({ open, status, capabilities, theme = { preferenc
           </div>
         </Dialog.Content>
       </Dialog.Portal>
+      <CliUpdateDialog
+        open={updateDialogOpen}
+        snapshot={cliUpdate}
+        serviceActive={status.server.kind === 'connected' || status.server.kind === 'starting'}
+        onConfirm={onInstallCliUpdate}
+        onOpenChange={setUpdateDialogOpen}
+      />
     </Dialog.Root>
   );
 }

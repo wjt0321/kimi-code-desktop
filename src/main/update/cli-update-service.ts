@@ -157,7 +157,7 @@ export class CliUpdateService {
       latestVersion,
       checkedAt: cached.checkedAt ?? undefined,
       installSource: source,
-      installCommand: command?.display,
+      installCommand: command?.display ?? 'kimi upgrade',
       canAutoInstall: command !== undefined,
       updateAvailable: true,
       error: refreshError ? '暂时无法检查 CLI 更新，正在使用上次检查结果。' : undefined,

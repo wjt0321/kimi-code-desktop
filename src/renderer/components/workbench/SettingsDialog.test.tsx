@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DesktopCapabilitySnapshot, DesktopStatus } from '../../../shared/contracts';
@@ -78,4 +79,38 @@ describe('SettingsDialog compatibility presentation', () => {
     );
     expect(screen.getAllByText('已可用').length).toBeGreaterThan(0);
   });
+
+  it('checks for CLI updates and opens the branded confirmation flow', async () => {
+    const check = vi.fn();
+    const install = vi.fn();
+    render(
+      <SettingsDialog
+        open
+        status={status}
+        capabilities={capabilities}
+        cliUpdate={{
+          phase: 'available',
+          currentVersion: '0.30.0',
+          latestVersion: '0.31.0',
+          installSource: 'npm-global',
+          installCommand: 'npm install --global @moonshot-ai/kimi-code@0.31.0',
+          canAutoInstall: true,
+          updateAvailable: true,
+        }}
+        onCheckCliUpdate={check}
+        onInstallCliUpdate={install}
+        onRefreshCapabilities={vi.fn()}
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '检查更新' }));
+    expect(check).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole('button', { name: '升级到 0.31.0' }));
+    expect(screen.getByRole('dialog', { name: '确认升级 CLI' })).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '开始升级' }));
+    expect(install).toHaveBeenCalledOnce();
+  });
+
 });
+

@@ -79,4 +79,42 @@ describe('CommandPalette', () => {
     expect(screen.getByRole('option', { name: '撤回上一轮' }).getAttribute('aria-disabled')).toBe('true');
     expect(screen.getByRole('option', { name: '压缩上下文…' }).getAttribute('aria-disabled')).toBe('true');
   });
+
+  it('switches themes and checks CLI updates from the palette', async () => {
+    const user = userEvent.setup();
+    const onThemeChange = vi.fn();
+    const onCheckCliUpdate = vi.fn();
+    render(
+      <CommandPalette
+        status={status}
+        hasSession={false}
+        sessionBusy={false}
+        runtimeAvailable={false}
+        planMode={false}
+        theme={{ preference: 'system', resolved: 'dark' }}
+        onThemeChange={onThemeChange}
+        onCheckCliUpdate={onCheckCliUpdate}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRefresh={vi.fn()}
+        onChoose={vi.fn()}
+        onCreateTask={vi.fn()}
+        onRefreshRuntime={vi.fn()}
+        onTogglePlan={vi.fn()}
+        onUndo={vi.fn()}
+        onOpenCompact={vi.fn()}
+        onOpenFork={vi.fn()}
+        onOpenArchived={vi.fn()}
+      />,
+    );
+
+    await user.keyboard('{Control>}k{/Control}');
+    await user.click(screen.getByRole('option', { name: '使用浅色主题' }));
+    expect(onThemeChange).toHaveBeenCalledWith('light');
+
+    await user.keyboard('{Control>}k{/Control}');
+    await user.click(screen.getByRole('option', { name: '检查 CLI 更新' }));
+    expect(onCheckCliUpdate).toHaveBeenCalledOnce();
+  });
+
 });

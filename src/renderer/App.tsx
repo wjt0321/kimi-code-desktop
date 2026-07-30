@@ -21,7 +21,6 @@ export function App() {
   const desktopCapabilities = useDesktopCapabilities();
   const { status } = desktop;
   const workbench = useWorkbench(status.server.kind === 'connected');
-  void cliUpdate;
 
   useEffect(() => window.desktop.onCloseRequested(() => setExitDialogOpen(true)), []);
 
@@ -57,7 +56,10 @@ export function App() {
         status={status}
         capabilities={desktopCapabilities.capabilities}
         theme={desktopTheme.theme}
+        cliUpdate={cliUpdate.snapshot}
         onThemeChange={(preference) => void desktopTheme.setTheme(preference)}
+        onCheckCliUpdate={() => void cliUpdate.check(true)}
+        onInstallCliUpdate={() => void cliUpdate.install()}
         onRefreshCapabilities={() => void desktopCapabilities.refreshCapabilities()}
         workspaces={workbench.workspaces}
         models={workbench.models}
@@ -121,6 +123,9 @@ export function App() {
         onOpenCompact={() => setSessionActionRequest((current) => ({ revision: (current?.revision ?? 0) + 1, action: 'compact' }))}
         onOpenFork={() => setSessionActionRequest((current) => ({ revision: (current?.revision ?? 0) + 1, action: 'fork' }))}
         onOpenArchived={() => setArchivedRequest((value) => value + 1)}
+        theme={desktopTheme.theme}
+        onThemeChange={(preference) => void desktopTheme.setTheme(preference)}
+        onCheckCliUpdate={() => void cliUpdate.check(true)}
       />
       {exitDialog}
     </>

@@ -128,6 +128,7 @@ describe('CliUpdateService checks', () => {
       phase: 'available',
       installSource: 'unsupported',
       canAutoInstall: false,
+      installCommand: 'kimi upgrade',
       updateAvailable: true,
     });
   });
