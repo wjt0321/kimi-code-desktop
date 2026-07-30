@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DesktopApprovalSchema,
+  DesktopDiffLineSchema,
   DesktopModelSchema,
+  DesktopTimelineEntrySchema,
   DesktopSessionRuntimeSchema,
   DesktopTaskEventSchema,
   DesktopTaskSnapshotSchema,
@@ -88,5 +91,53 @@ describe('session runtime contracts', () => {
     })).toThrow();
     expect(() => UpdateRuntimeRequestSchema.parse({ sessionId: 's_1' })).toThrow('必须提供至少一项运行策略更新');
     expect(UpdateRuntimeRequestSchema.parse({ sessionId: 's_1', permission: 'auto' })).toEqual({ sessionId: 's_1', permission: 'auto' });
+  });
+});
+describe('rich execution contracts', () => {
+  it('accepts a structured shell tool and plan review approval', () => {
+    expect(DesktopTimelineEntrySchema.parse({
+      id: 'frame-1',
+      kind: 'tool',
+      toolCallId: 'call-1',
+      name: 'Shell',
+      category: 'shell',
+      state: 'running',
+      title: '运行命令',
+      summary: 'pnpm test',
+      command: 'pnpm test',
+      cwd: 'D:/example',
+      progress: { kind: 'stdout', text: 'RUN v4' },
+    })).toMatchObject({ category: 'shell', command: 'pnpm test' });
+
+    expect(DesktopApprovalSchema.parse({
+      id: 'approval-1',
+      kind: 'approval',
+      toolName: 'ExitPlanMode',
+      action: 'review',
+      summary: '审阅计划',
+      createdAt: '2026-07-30T00:00:00.000Z',
+      toolCallId: 'call-1',
+      block: {
+        kind: 'plan_review',
+        plan: '# 实施计划',
+        path: 'plan.md',
+        options: [{ label: '批准并实施', description: '开始编码' }],
+      },
+    }).block).toMatchObject({ kind: 'plan_review', path: 'plan.md' });
+  });
+
+  it('rejects invalid progress and diff values', () => {
+    expect(() => DesktopTimelineEntrySchema.parse({
+      id: 'frame-1',
+      kind: 'tool',
+      name: 'Shell',
+      category: 'shell',
+      state: 'running',
+      title: '运行命令',
+      summary: 'pnpm test',
+      progress: { kind: 'progress', percent: 101 },
+    })).toThrow();
+
+    expect(() => DesktopDiffLineSchema.parse({ type: 'add', text: 'line', oldNo: 0, newNo: -1 })).toThrow();
   });
 });

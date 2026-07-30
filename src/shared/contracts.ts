@@ -171,38 +171,92 @@ export const RenameSessionRequestSchema = z.object({
 
 export type RenameSessionRequest = z.infer<typeof RenameSessionRequestSchema>;
 
+export type DesktopDisplayValue =
+  | null
+  | string
+  | number
+  | boolean
+  | { type: 'array'; items: DesktopDisplayValue[]; truncated?: boolean }
+  | { type: 'object'; entries: { key: string; value: DesktopDisplayValue }[]; truncated?: boolean };
+
+export const DesktopDisplayValueSchema: z.ZodType<DesktopDisplayValue> = z.lazy(() => z.union([
+  z.null(), z.string(), z.number(), z.boolean(),
+  z.object({ type: z.literal('array'), items: z.array(DesktopDisplayValueSchema), truncated: z.boolean().optional() }),
+  z.object({
+    type: z.literal('object'),
+    entries: z.array(z.object({ key: z.string(), value: DesktopDisplayValueSchema })),
+    truncated: z.boolean().optional(),
+  }),
+]));
+
+export const DesktopToolProgressSchema = z.object({
+  kind: z.enum(['stdout', 'stderr', 'progress', 'status', 'custom']),
+  text: z.string().optional(),
+  percent: z.number().min(0).max(100).optional(),
+  customKind: z.string().optional(),
+  customData: DesktopDisplayValueSchema.optional(),
+});
+export type DesktopToolProgress = z.infer<typeof DesktopToolProgressSchema>;
+
+export const DesktopDiffLineSchema = z.object({
+  type: z.enum(['add', 'del', 'context', 'hunk']),
+  text: z.string(),
+  oldNo: z.number().int().positive().optional(),
+  newNo: z.number().int().positive().optional(),
+});
+export type DesktopDiffLine = z.infer<typeof DesktopDiffLineSchema>;
+
+export const DesktopDiffTargetSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  path: z.string().min(1).optional(),
+  lines: z.array(DesktopDiffLineSchema),
+  fallbackOutput: z.string().optional(),
+  truncated: z.boolean().optional(),
+});
+export type DesktopDiffTarget = z.infer<typeof DesktopDiffTargetSchema>;
+
+export const DesktopAgentRefSchema = z.object({
+  agentId: z.string().min(1),
+  role: z.enum(['child', 'member']).optional(),
+});
+export type DesktopAgentRef = z.infer<typeof DesktopAgentRefSchema>;
+
+export const DesktopTimelineToolEntrySchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('tool'),
+  toolCallId: z.string().min(1).optional(),
+  name: z.string().min(1),
+  view: z.string().min(1).optional(),
+  category: z.enum(['shell', 'read', 'write', 'edit', 'search', 'web', 'agent', 'task', 'todo', 'generic']).optional(),
+  state: z.enum(['running', 'done', 'error']),
+  title: z.string().min(1).optional(),
+  summary: z.string(),
+  inputText: z.string().optional(),
+  input: DesktopDisplayValueSchema.optional(),
+  output: DesktopDisplayValueSchema.optional(),
+  error: z.string().optional(),
+  progress: DesktopToolProgressSchema.optional(),
+  path: z.string().optional(),
+  command: z.string().optional(),
+  cwd: z.string().optional(),
+  query: z.string().optional(),
+  approvalId: z.string().min(1).optional(),
+  taskId: z.string().min(1).optional(),
+  todoId: z.string().min(1).optional(),
+  agentRefs: z.array(DesktopAgentRefSchema).optional(),
+  diff: DesktopDiffTargetSchema.optional(),
+});
+export type DesktopTimelineToolEntry = z.infer<typeof DesktopTimelineToolEntrySchema>;
+
 export const DesktopTimelineEntrySchema = z.discriminatedUnion('kind', [
-  z.object({
-    id: z.string().min(1),
-    kind: z.literal('text'),
-    role: z.enum(['user', 'assistant']),
-    text: z.string(),
-    state: z.enum(['complete', 'streaming']),
-  }),
-  z.object({
-    id: z.string().min(1),
-    kind: z.literal('thinking'),
-    text: z.string(),
-    state: z.enum(['complete', 'streaming']),
-  }),
-  z.object({
-    id: z.string().min(1),
-    kind: z.literal('tool'),
-    name: z.string().min(1),
-    state: z.enum(['running', 'done', 'error']),
-    summary: z.string(),
-    output: z.string().optional(),
-  }),
-  z.object({
-    id: z.string().min(1),
-    kind: z.literal('notice'),
-    level: z.enum(['info', 'warning', 'error']),
-    text: z.string(),
-  }),
+  z.object({ id: z.string().min(1), kind: z.literal('text'), role: z.enum(['user', 'assistant']), text: z.string(), state: z.enum(['complete', 'streaming']) }),
+  z.object({ id: z.string().min(1), kind: z.literal('thinking'), text: z.string(), state: z.enum(['complete', 'streaming']) }),
+  DesktopTimelineToolEntrySchema,
+  z.object({ id: z.string().min(1), kind: z.literal('notice'), level: z.enum(['info', 'warning', 'error']), text: z.string() }),
 ]);
 
 export type DesktopTimelineEntry = z.infer<typeof DesktopTimelineEntrySchema>;
-
 export const DesktopTodoSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -224,6 +278,25 @@ export const DesktopTaskSchema = z.object({
 
 export type DesktopTask = z.infer<typeof DesktopTaskSchema>;
 
+export const DesktopApprovalBlockSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('shell'), command: z.string().min(1), cwd: z.string().optional(), danger: z.string().optional() }),
+  z.object({ kind: z.literal('diff'), path: z.string().min(1), diff: z.array(DesktopDiffLineSchema) }),
+  z.object({ kind: z.literal('file'), path: z.string().min(1), content: z.string(), language: z.string().optional() }),
+  z.object({ kind: z.literal('fileop'), op: z.string().min(1), path: z.string().min(1), detail: z.string().optional() }),
+  z.object({ kind: z.literal('url'), method: z.string().optional(), url: z.string().min(1) }),
+  z.object({ kind: z.literal('search'), query: z.string().min(1), scope: z.string().optional() }),
+  z.object({ kind: z.literal('invocation'), kind2: z.string().min(1), name: z.string().min(1), description: z.string().optional() }),
+  z.object({ kind: z.literal('todo'), items: z.array(z.object({ title: z.string().min(1), status: z.string().min(1) })) }),
+  z.object({
+    kind: z.literal('plan_review'),
+    plan: z.string().min(1),
+    path: z.string().optional(),
+    options: z.array(z.object({ label: z.string().min(1), description: z.string().optional() })).optional(),
+  }),
+  z.object({ kind: z.literal('generic'), summary: z.string() }),
+]);
+export type DesktopApprovalBlock = z.infer<typeof DesktopApprovalBlockSchema>;
+
 export const DesktopApprovalSchema = z.object({
   id: z.string().min(1),
   kind: z.literal('approval'),
@@ -232,10 +305,12 @@ export const DesktopApprovalSchema = z.object({
   summary: z.string(),
   createdAt: z.string(),
   expiresAt: z.string().optional(),
+  toolCallId: z.string().min(1).optional(),
+  agentId: z.string().min(1).optional(),
+  block: DesktopApprovalBlockSchema.optional(),
 });
 
 export type DesktopApproval = z.infer<typeof DesktopApprovalSchema>;
-
 export const DesktopQuestionOptionSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -334,3 +409,5 @@ export const QuestionDismissRequestSchema = z.object({
 });
 
 export type QuestionDismissRequest = z.infer<typeof QuestionDismissRequestSchema>;
+
+

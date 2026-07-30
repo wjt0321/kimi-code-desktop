@@ -78,7 +78,7 @@ function TimelineEntry({ entry }: { entry: DesktopTimelineEntry }) {
           <span className="tool-block__state">{entry.state === 'running' ? <LoaderCircle size={13} className="spin" /> : entry.state === 'done' ? <CheckCircle2 size={13} /> : <CircleAlert size={13} />}{entry.state === 'running' ? '运行中' : entry.state === 'done' ? '已完成' : '失败'}</span>
           <ChevronRight size={13} className="details-chevron" />
         </summary>
-        {entry.output ? <pre className="tool-output">{entry.output}</pre> : <div className="tool-output tool-output--empty">工具没有返回可展示的输出。</div>}
+        {typeof entry.output === 'string' ? <pre className="tool-output">{entry.output}</pre> : <div className="tool-output tool-output--empty">工具没有返回可展示的输出。</div>}
       </details>
     );
   }
@@ -99,3 +99,4 @@ function runningLabel(phase: string): string {
   if (phase === 'streaming') return 'Kimi Code 正在生成回复';
   return 'Kimi Code 正在处理任务';
 }
+
