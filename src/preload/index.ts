@@ -4,9 +4,11 @@ import { z } from 'zod';
 import {
   ApprovalDecisionRequestSchema,
   CompactSessionRequestSchema,
+  CheckCliUpdateRequestSchema,
   CopyTextRequestSchema,
   CreateTaskRequestSchema,
   DesktopCapabilitySnapshotSchema,
+  DesktopCliUpdateSnapshotSchema,
   DesktopMessageSchema,
   DesktopModelSchema,
   DesktopSessionRuntimeSchema,
@@ -30,6 +32,7 @@ import {
   UpdateRuntimeRequestSchema,
   WorkspaceRootRequestSchema,
   type DesktopCapabilitySnapshot,
+  type DesktopCliUpdateSnapshot,
   type DesktopMessage,
   type DesktopModel,
   type CompactSessionRequest,
@@ -59,6 +62,10 @@ function parseStatus(value: unknown): DesktopStatus {
 
 function parseTheme(value: unknown): DesktopThemeSnapshot {
   return DesktopThemeSnapshotSchema.parse(value);
+}
+
+function parseCliUpdate(value: unknown): DesktopCliUpdateSnapshot {
+  return DesktopCliUpdateSnapshotSchema.parse(value);
 }
 
 function parseCapabilities(value: unknown): DesktopCapabilitySnapshot {
@@ -115,6 +122,13 @@ function subscribeTheme(listener: (snapshot: DesktopThemeSnapshot) => void): () 
   return () => ipcRenderer.removeListener(eventName, handler);
 }
 
+function subscribeCliUpdate(listener: (snapshot: DesktopCliUpdateSnapshot) => void): () => void {
+  const eventName = 'desktop:cli-update-changed';
+  const handler = (_event: Electron.IpcRendererEvent, value: unknown) => listener(parseCliUpdate(value));
+  ipcRenderer.on(eventName, handler);
+  return () => ipcRenderer.removeListener(eventName, handler);
+}
+
 function subscribeCapabilities(listener: (snapshot: DesktopCapabilitySnapshot) => void): () => void {
   const eventName = 'desktop:capabilities-changed';
   const handler = (_event: Electron.IpcRendererEvent, value: unknown) => listener(parseCapabilities(value));
@@ -141,6 +155,10 @@ contextBridge.exposeInMainWorld('desktop', {
   theme: () => ipcRenderer.invoke('desktop:theme').then(parseTheme),
   setTheme: (input: unknown) => ipcRenderer.invoke('desktop:set-theme', SetThemeRequestSchema.parse(input)).then(parseTheme),
   onTheme: subscribeTheme,
+  cliUpdate: () => ipcRenderer.invoke('desktop:cli-update').then(parseCliUpdate),
+  checkCliUpdate: (force = true) => ipcRenderer.invoke('desktop:check-cli-update', CheckCliUpdateRequestSchema.parse({ force })).then(parseCliUpdate),
+  installCliUpdate: () => ipcRenderer.invoke('desktop:install-cli-update').then(parseCliUpdate),
+  onCliUpdate: subscribeCliUpdate,
   capabilities: () => ipcRenderer.invoke('desktop:capabilities').then(parseCapabilities),
   refreshCapabilities: () => ipcRenderer.invoke('desktop:refresh-capabilities').then(parseCapabilities),
   refreshCli: () => ipcRenderer.invoke('desktop:refresh-cli').then(parseStatus),

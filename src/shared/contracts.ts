@@ -79,6 +79,9 @@ export const DesktopCliUpdateSnapshotSchema = z.object({
 });
 export type DesktopCliUpdateSnapshot = z.infer<typeof DesktopCliUpdateSnapshotSchema>;
 
+export const CheckCliUpdateRequestSchema = z.object({ force: z.boolean().default(false) });
+export type CheckCliUpdateRequest = z.infer<typeof CheckCliUpdateRequestSchema>;
+
 export const DesktopCapabilityStateSchema = z.enum(['supported', 'unsupported', 'unknown']);
 export type DesktopCapabilityState = z.infer<typeof DesktopCapabilityStateSchema>;
 

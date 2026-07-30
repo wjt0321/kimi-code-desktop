@@ -4,6 +4,7 @@ import type {
   CopyTextRequest,
   CreateTaskRequest,
   DesktopCapabilitySnapshot,
+  DesktopCliUpdateSnapshot,
   DesktopMessage,
   DesktopModel,
   DesktopSession,
@@ -32,6 +33,10 @@ export interface DesktopApi {
   theme(): Promise<DesktopThemeSnapshot>;
   setTheme(input: SetThemeRequest): Promise<DesktopThemeSnapshot>;
   onTheme(listener: (snapshot: DesktopThemeSnapshot) => void): () => void;
+  cliUpdate(): Promise<DesktopCliUpdateSnapshot>;
+  checkCliUpdate(force?: boolean): Promise<DesktopCliUpdateSnapshot>;
+  installCliUpdate(): Promise<DesktopCliUpdateSnapshot>;
+  onCliUpdate(listener: (snapshot: DesktopCliUpdateSnapshot) => void): () => void;
   capabilities(): Promise<DesktopCapabilitySnapshot>;
   refreshCapabilities(): Promise<DesktopCapabilitySnapshot>;
   refreshCli(): Promise<DesktopStatus>;

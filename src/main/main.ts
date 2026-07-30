@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   ApprovalDecisionRequestSchema,
+  CheckCliUpdateRequestSchema,
   CreateTaskRequestSchema,
   PromptRequestSchema,
   QuestionDismissRequestSchema,
@@ -28,6 +29,11 @@ import { LiveTaskFeed } from './server/live-task-feed';
 import { KimiServerLifecycle } from './server/server-lifecycle';
 import { createRuntimeShutdown } from './runtime-shutdown';
 import { DesktopThemeService } from './theme/theme-service';
+import { CliUpdateService } from './update/cli-update-service';
+import { createCliUpdateCacheStore } from './update/update-cache';
+import { fetchLatestCliRelease } from './update/update-manifest';
+import { discoverInstallSource } from './update/install-source';
+import { createUpdateProcessRunner } from './update/update-process';
 import { createCloseRequestController, resolveWindowIconPath, resolveWindowTheme } from './window-behavior';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -99,7 +105,12 @@ function getAvailablePort(): Promise<number> {
   });
 }
 
-function registerIpc(controller: DesktopController, client: KimiDesktopClient, theme: DesktopThemeService): void {
+function registerIpc(
+  controller: DesktopController,
+  client: KimiDesktopClient,
+  theme: DesktopThemeService,
+  cliUpdate: CliUpdateService,
+): void {
   const sessionHandlers = createSessionIpcHandlers(client);
   const reviewHandlers = createReviewIpcHandlers({
     exists: existsSync,
@@ -109,6 +120,14 @@ function registerIpc(controller: DesktopController, client: KimiDesktopClient, t
   ipcMain.handle('desktop:status', () => controller.status());
   ipcMain.handle('desktop:theme', () => theme.snapshot());
   ipcMain.handle('desktop:set-theme', (_event, input: unknown) => theme.setPreference(SetThemeRequestSchema.parse(input).preference));
+  ipcMain.handle('desktop:cli-update', () => cliUpdate.snapshot());
+  ipcMain.handle('desktop:check-cli-update', (_event, input: unknown) => {
+    const request = CheckCliUpdateRequestSchema.parse(input);
+    const cli = controller.status().cli;
+    if (cli.kind !== 'ready') return cliUpdate.snapshot();
+    return cliUpdate.check(cli, request.force);
+  });
+  ipcMain.handle('desktop:install-cli-update', () => cliUpdate.install());
   ipcMain.handle('desktop:capabilities', () => controller.capabilitySnapshot());
   ipcMain.handle('desktop:refresh-capabilities', () => controller.refreshCapabilities());
   ipcMain.handle('desktop:refresh-cli', () => controller.refreshCli());
@@ -180,6 +199,9 @@ function registerIpc(controller: DesktopController, client: KimiDesktopClient, t
   controller.onCapabilities((snapshot) => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('desktop:capabilities-changed', snapshot);
   });
+  cliUpdate.onSnapshot((snapshot) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('desktop:cli-update-changed', snapshot);
+  });
 }
 
 app.whenReady().then(async () => {
@@ -201,7 +223,14 @@ app.whenReady().then(async () => {
     feed,
     capabilities,
   });
-  registerIpc(controller, new KimiDesktopClient(lifecycle, capabilities), theme);
+  const cliUpdate = new CliUpdateService({
+    cache: createCliUpdateCacheStore(join(app.getPath('userData'), 'cli-update.json')),
+    desktop: controller,
+    fetchLatest: fetchLatestCliRelease,
+    detectSource: (cliCommand) => discoverInstallSource({ cliCommand }),
+    processRunner: createUpdateProcessRunner(),
+  });
+  registerIpc(controller, new KimiDesktopClient(lifecycle, capabilities), theme, cliUpdate);
   controller.onTaskEvent((event) => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('desktop:task-event', event);
   });
@@ -216,7 +245,11 @@ app.whenReady().then(async () => {
   const shutdown = createRuntimeShutdown(feed, lifecycle);
   const closeRuntime = () => shutdown();
   createMainWindow(closeRuntime, theme.snapshot().resolved);
-  await controller.refreshCli();
+  const initialStatus = await controller.refreshCli();
+  if (initialStatus.cli.kind === 'ready') {
+    const cli = initialStatus.cli;
+    setTimeout(() => { void cliUpdate.check(cli).catch(() => undefined); }, 1_000);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow(closeRuntime, theme.snapshot().resolved);

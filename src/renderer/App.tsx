@@ -4,6 +4,7 @@ import { WorkbenchShell } from './components/workbench/WorkbenchShell';
 import { CliSetupView } from './components/CliSetupView';
 import { CommandPalette } from './components/CommandPalette';
 import { ExitDialog } from './components/ExitDialog';
+import { useCliUpdate } from './hooks/useCliUpdate';
 import { useDesktopCapabilities } from './hooks/useDesktopCapabilities';
 import { useDesktopTheme } from './hooks/useDesktopTheme';
 import { useDesktopStatus } from './hooks/useDesktopStatus';
@@ -16,9 +17,11 @@ export function App() {
   const [archivedRequest, setArchivedRequest] = useState(0);
   const desktop = useDesktopStatus();
   const desktopTheme = useDesktopTheme();
+  const cliUpdate = useCliUpdate();
   const desktopCapabilities = useDesktopCapabilities();
   const { status } = desktop;
   const workbench = useWorkbench(status.server.kind === 'connected');
+  void cliUpdate;
 
   useEffect(() => window.desktop.onCloseRequested(() => setExitDialogOpen(true)), []);
 

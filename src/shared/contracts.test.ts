@@ -4,6 +4,7 @@ import {
   DesktopApprovalSchema,
   DesktopCapabilitySnapshotSchema,
   DesktopCliUpdateSnapshotSchema,
+  CheckCliUpdateRequestSchema,
   DesktopThemeSnapshotSchema,
   SetThemeRequestSchema,
   DesktopDiffLineSchema,
@@ -251,6 +252,12 @@ describe('desktop theme and CLI update contracts', () => {
       updateAvailable: false,
       error: '检查更新失败',
     }).phase).toBe('failed');
+  });
+
+  it('validates manual update checks without accepting executable input', () => {
+    expect(CheckCliUpdateRequestSchema.parse({})).toEqual({ force: false });
+    expect(CheckCliUpdateRequestSchema.parse({ force: true })).toEqual({ force: true });
+    expect(CheckCliUpdateRequestSchema.parse({ force: true, executable: 'cmd.exe' })).toEqual({ force: true });
   });
 
   it('rejects unknown install sources and update phases', () => {
