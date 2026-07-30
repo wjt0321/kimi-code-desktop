@@ -1,15 +1,18 @@
-import { Bot, Brain, CheckCircle2, ChevronRight, CircleAlert, LoaderCircle, Terminal, User, Wrench } from 'lucide-react';
+import { Bot, Brain, ChevronRight, CircleAlert, LoaderCircle, User } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import type { DesktopTaskSnapshot, DesktopTimelineEntry } from '../../../shared/contracts';
+import type { DesktopDiffTarget, DesktopTaskSnapshot, DesktopTimelineEntry } from '../../../shared/contracts';
 import { RichText } from './RichText';
+import { ToolCallCard } from './ToolCallCard';
 
 interface TaskTimelineProps {
   snapshot: DesktopTaskSnapshot | undefined;
   loading: boolean;
+  onOpenDiff?(target: DesktopDiffTarget): void;
+  onOpenTask?(taskId: string): void;
 }
 
-export function TaskTimeline({ snapshot, loading }: TaskTimelineProps) {
+export function TaskTimeline({ snapshot, loading, onOpenDiff = () => undefined, onOpenTask = () => undefined }: TaskTimelineProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const entryCount = snapshot?.timeline.length ?? 0;
 
@@ -31,7 +34,7 @@ export function TaskTimeline({ snapshot, loading }: TaskTimelineProps) {
   return (
     <div className="task-timeline" aria-live="polite">
       <div className="task-timeline__inner">
-        {snapshot.timeline.map((entry) => <TimelineEntry key={entry.id} entry={entry} />)}
+        {snapshot.timeline.map((entry) => <TimelineEntry key={entry.id} entry={entry} onOpenDiff={onOpenDiff} onOpenTask={onOpenTask} />)}
         {snapshot.status.phase === 'running' || snapshot.status.phase === 'streaming' || snapshot.status.phase === 'tool' ? (
           <div className="timeline-running"><LoaderCircle size={14} /><span>{runningLabel(snapshot.status.phase)}</span></div>
         ) : null}
@@ -41,7 +44,11 @@ export function TaskTimeline({ snapshot, loading }: TaskTimelineProps) {
   );
 }
 
-function TimelineEntry({ entry }: { entry: DesktopTimelineEntry }) {
+function TimelineEntry({ entry, onOpenDiff, onOpenTask }: {
+  entry: DesktopTimelineEntry;
+  onOpenDiff(target: DesktopDiffTarget): void;
+  onOpenTask(taskId: string): void;
+}) {
   if (entry.kind === 'text') {
     if (entry.role === 'user') {
       return (
@@ -68,26 +75,9 @@ function TimelineEntry({ entry }: { entry: DesktopTimelineEntry }) {
     );
   }
 
-  if (entry.kind === 'tool') {
-    const Icon = entry.name.toLowerCase().includes('shell') || entry.name.toLowerCase().includes('terminal') ? Terminal : Wrench;
-    return (
-      <details className={`tool-block tool-block--${entry.state}`} open={entry.state !== 'done'}>
-        <summary>
-          <span className="tool-block__icon"><Icon size={14} /></span>
-          <span className="tool-block__copy"><strong>{entry.name}</strong><small>{entry.summary}</small></span>
-          <span className="tool-block__state">{entry.state === 'running' ? <LoaderCircle size={13} className="spin" /> : entry.state === 'done' ? <CheckCircle2 size={13} /> : <CircleAlert size={13} />}{entry.state === 'running' ? '运行中' : entry.state === 'done' ? '已完成' : '失败'}</span>
-          <ChevronRight size={13} className="details-chevron" />
-        </summary>
-        {typeof entry.output === 'string' ? <pre className="tool-output">{entry.output}</pre> : <div className="tool-output tool-output--empty">工具没有返回可展示的输出。</div>}
-      </details>
-    );
-  }
+  if (entry.kind === 'tool') return <ToolCallCard entry={entry} onOpenDiff={onOpenDiff} onOpenTask={onOpenTask} />;
 
-  return (
-    <div className={`timeline-notice timeline-notice--${entry.level}`}>
-      <CircleAlert size={14} /><span>{entry.text}</span>
-    </div>
-  );
+  return <div className={`timeline-notice timeline-notice--${entry.level}`}><CircleAlert size={14} /><span>{entry.text}</span></div>;
 }
 
 function TimelineLoading() {
