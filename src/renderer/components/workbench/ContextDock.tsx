@@ -8,13 +8,16 @@ interface ContextDockProps {
   runtime: DesktopSessionRuntime | undefined;
   runtimeLoading: boolean;
   onRefreshRuntime(): void;
+  onSelectTask(taskId: string): void;
   onAnswer(questionId: string, answers: Record<string, { kind: 'single'; optionId: string } | { kind: 'multi'; optionIds: string[] } | { kind: 'other'; text: string } | { kind: 'skipped' }>): void;
   onDismiss(questionId: string): void;
   onClose?(): void;
 }
 
-export function ContextDock({ snapshot, runtime, runtimeLoading, onRefreshRuntime, onAnswer, onDismiss, onClose }: ContextDockProps) {
+export function ContextDock({ snapshot, runtime, runtimeLoading, onRefreshRuntime, onSelectTask, onAnswer, onDismiss, onClose }: ContextDockProps) {
   const attentionCount = snapshot.approvals.length + snapshot.questions.length;
+  const completedTodos = snapshot.todos.filter((todo) => todo.status === 'done').length;
+  const todoProgress = snapshot.todos.length > 0 ? completedTodos / snapshot.todos.length * 100 : 0;
 
   return (
     <aside className="workbench-context" aria-label="任务上下文">
@@ -49,15 +52,16 @@ export function ContextDock({ snapshot, runtime, runtimeLoading, onRefreshRuntim
         </section>
       ) : null}
       {snapshot.todos.length ? (
-        <section className="context-section">
-          <h2>待办</h2>
+        <section className="context-section context-todos">
+          <div className="context-section__heading"><h2>待办 {completedTodos} / {snapshot.todos.length}</h2><span>{Math.round(todoProgress)}%</span></div>
+          <span className="context-todos__track" aria-hidden="true"><span style={{ width: `${todoProgress}%` }} /></span>
           {snapshot.todos.map((todo) => <div key={todo.id} className={`context-todo context-todo--${todo.status}`}>{todo.title}</div>)}
         </section>
       ) : null}
       {snapshot.tasks.length ? (
         <section className="context-section">
-          <h2>活动</h2>
-          {snapshot.tasks.map((task) => <div key={task.id} className="context-activity"><strong>{task.title}</strong><span>{task.state}</span></div>)}
+          <h2>后台活动</h2>
+          {snapshot.tasks.map((task) => <button key={task.id} type="button" className="context-activity" aria-label={`查看后台任务：${task.title}`} onClick={() => onSelectTask(task.id)}><span><strong>{task.title}</strong><small>{taskKindLabel(task.kind)}</small></span><em className={`context-task-state context-task-state--${task.state}`}>{taskStateLabel(task.state)}</em></button>)}
         </section>
       ) : null}
     </aside>
@@ -147,4 +151,14 @@ function focusApproval(approvalId: string): void {
   const target = document.getElementById(`approval-${approvalId}`);
   target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   target?.focus({ preventScroll: true });
+}
+
+function taskStateLabel(state: DesktopTaskSnapshot['tasks'][number]['state']): string {
+  const labels = { running: '运行中', completed: '已完成', failed: '失败', timed_out: '已超时', killed: '已终止', lost: '已失联' } as const;
+  return labels[state];
+}
+
+function taskKindLabel(kind: DesktopTaskSnapshot['tasks'][number]['kind']): string {
+  const labels = { shell: '后台命令', subagent: '子 Agent', tool: '工具任务', other: '后台任务' } as const;
+  return labels[kind];
 }

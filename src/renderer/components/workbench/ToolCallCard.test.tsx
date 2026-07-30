@@ -66,4 +66,13 @@ describe('ToolCallCard', () => {
     expect(screen.getAllByText('失败').length).toBeGreaterThan(0);
     expect(screen.getByText('boom')).not.toBeNull();
   });
+
+  it('shows subordinate agent references with localized roles', async () => {
+    const user = userEvent.setup();
+    render(<ToolCallCard entry={{ ...shellEntry, id: 'agent-tool', state: 'done', category: 'agent', title: '并行检查', agentRefs: [{ agentId: 'agent-child', role: 'child' }, { agentId: 'agent-member', role: 'member' }] }} onOpenDiff={vi.fn()} onOpenTask={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: '展开并行检查详情' }));
+    expect(screen.getAllByText('子 Agent').length).toBeGreaterThan(0);
+    expect(screen.getByText('Agent 成员')).not.toBeNull();
+    expect(screen.getByText('agent-child')).not.toBeNull();
+  });
 });

@@ -19,7 +19,7 @@ export function ToolCallCard({ entry, onOpenDiff, onOpenTask }: ToolCallCardProp
   const [open, setOpen] = useState(entry.state !== 'done');
   const Icon = categoryIcon(entry.category);
   const status = statusPresentation(entry.state);
-  const hasDetails = Boolean(entry.command || entry.cwd || entry.path || entry.query || entry.input || entry.output || entry.error || entry.progress || entry.diff || entry.taskId);
+  const hasDetails = Boolean(entry.command || entry.cwd || entry.path || entry.query || entry.input || entry.output || entry.error || entry.progress || entry.diff || entry.taskId || entry.agentRefs?.length);
 
   return (
     <article className={`execution-card execution-card--${entry.state}`} data-tool-call-id={entry.toolCallId}>
@@ -64,6 +64,7 @@ export function ToolCallCard({ entry, onOpenDiff, onOpenTask }: ToolCallCardProp
           {entry.input ? <ExecutionSection title="输入"><StructuredValue value={entry.input} /></ExecutionSection> : null}
           {entry.output ? <ExecutionSection title="输出"><StructuredValue value={entry.output} /></ExecutionSection> : null}
           {entry.error ? <div className="execution-card__error"><CircleAlert size={14} /><pre>{entry.error}</pre></div> : null}
+          {entry.agentRefs?.length ? <div className="execution-agent-refs">{entry.agentRefs.map((agent) => <span key={`${agent.agentId}:${agent.role ?? ''}`}><strong>{agent.role === 'child' ? '子 Agent' : agent.role === 'member' ? 'Agent 成员' : 'Agent'}</strong><code>{agent.agentId}</code></span>)}</div> : null}
           {entry.diff || entry.taskId ? (
             <div className="execution-card__actions">
               {entry.diff ? <button type="button" className="execution-action" onClick={() => onOpenDiff(entry.diff!)}><FileCode2 size={14} />查看完整差异</button> : null}

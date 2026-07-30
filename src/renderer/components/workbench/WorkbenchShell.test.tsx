@@ -234,3 +234,42 @@ describe('WorkbenchShell', () => {
     await user.click(screen.getByRole('button', { name: '关闭差异审阅' }));
     expect(screen.queryByRole('complementary', { name: '文件差异审阅' })).toBeNull();
   });
+
+  it('opens localized background task details from an execution card', async () => {
+    const user = userEvent.setup();
+    const taskSnapshot: DesktopTaskSnapshot = {
+      ...snapshot,
+      timeline: [{ id: 'task-tool', kind: 'tool', name: 'Task', category: 'task', state: 'done', title: '检查测试', summary: '后台检查已结束', taskId: 'task-1' }],
+      tasks: [{ id: 'task-1', title: '检查测试', kind: 'subagent', state: 'failed', outputTail: '2 tests failed', error: '退出码 1', startedAt: '2026-07-30T01:00:00.000Z', endedAt: '2026-07-30T01:02:00.000Z' }],
+    };
+
+    render(
+      <WorkbenchShell
+        status={status}
+        workspaces={[workspace]}
+        models={models}
+        selectedModelId={models[0].id}
+        selectedWorkspaceId={workspace.id}
+        sessions={[session]}
+        selectedSession={session}
+        snapshot={taskSnapshot}
+        runtime={runtime}
+        runtimeLoading={false}
+        runtimeUpdating={false}
+        loading={false}
+        error={undefined}
+        pendingApprovalIds={[]}
+        {...actions}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '展开检查测试详情' }));
+    await user.click(screen.getByRole('button', { name: '查看后台任务' }));
+    expect(screen.getByRole('complementary', { name: '后台任务详情' })).not.toBeNull();
+    expect(screen.getByRole('heading', { name: '检查测试' })).not.toBeNull();
+    expect(screen.getByText('子 Agent')).not.toBeNull();
+    expect(screen.getByText('失败')).not.toBeNull();
+    expect(screen.getByRole('heading', { name: '输出尾部' })).not.toBeNull();
+    expect(screen.getByText('2 tests failed')).not.toBeNull();
+    expect(screen.getByRole('alert').textContent).toContain('退出码 1');
+  });

@@ -27,6 +27,7 @@ import type { CreateTaskRequest, DesktopDiffTarget, DesktopModel, DesktopSession
 import kimiBanner from '../../assets/kimi-banner-dark.svg';
 import kimiIcon from '../../assets/kimi-icon.svg';
 import { ArchivedSessionsDialog } from './ArchivedSessionsDialog';
+import { BackgroundTaskPanel } from './BackgroundTaskPanel';
 import { ContextDock } from './ContextDock';
 import { DiffReviewPanel } from './DiffReviewPanel';
 import { NewTaskDialog } from './NewTaskDialog';
@@ -135,6 +136,7 @@ export function WorkbenchShell({
 }: WorkbenchShellProps) {
   const [contextOpen, setContextOpen] = useState(false);
   const [selectedDiff, setSelectedDiff] = useState<DesktopDiffTarget>();
+  const [selectedTaskId, setSelectedTaskId] = useState<string>();
   const [reviewError, setReviewError] = useState<string>();
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -153,7 +155,8 @@ export function WorkbenchShell({
 
   const connected = status.server.kind === 'connected';
   const attentionCount = snapshot ? snapshot.approvals.length + snapshot.questions.length : 0;
-  const canShowContext = Boolean(selectedDiff || (snapshot && (attentionCount > 0 || snapshot.todos.length > 0 || snapshot.tasks.length > 0 || runtime !== undefined || runtimeLoading)));
+  const selectedBackgroundTask = snapshot?.tasks.find((task) => task.id === selectedTaskId);
+  const canShowContext = Boolean(selectedDiff || selectedBackgroundTask || (snapshot && (attentionCount > 0 || snapshot.todos.length > 0 || snapshot.tasks.length > 0 || runtime !== undefined || runtimeLoading)));
   const visibleError = reviewError ?? error;
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId);
   const statusSummary = presentWorkbenchStatus(status, selectedSession, snapshot);
@@ -361,7 +364,7 @@ export function WorkbenchShell({
 
         {selectedSession ? (
           <div className="task-canvas">
-            <TaskTimeline snapshot={snapshot} loading={loading} pendingApprovalIds={pendingApprovalIds} onApprovalDecision={onApprovalDecision} onOpenDiff={(target) => { setSelectedDiff(target); setContextOpen(true); }} />
+            <TaskTimeline snapshot={snapshot} loading={loading} pendingApprovalIds={pendingApprovalIds} onApprovalDecision={onApprovalDecision} onOpenDiff={(target) => { setSelectedDiff(target); setSelectedTaskId(undefined); setContextOpen(true); }} onOpenTask={(taskId) => { setSelectedTaskId(taskId); setSelectedDiff(undefined); setContextOpen(true); }} />
             <TaskComposer disabled={!connected} busy={selectedSession.busy} models={models} selectedModelId={selectedModelId} runtime={runtime} runtimeUpdating={runtimeUpdating} draft={composerDraft} onDraftConsumed={onDraftConsumed} onModelChange={onSelectModel} onRuntimeChange={onRuntimeChange} onSubmit={onSendPrompt} />
           </div>
         ) : (
@@ -412,7 +415,9 @@ export function WorkbenchShell({
           onCopyDiff={(text) => { void window.desktop.copyText({ text }).catch(() => setReviewError('无法复制差异内容。')); }}
           onRevealPath={(path) => { void window.desktop.revealPath({ path }).catch(() => setReviewError('无法在资源管理器中显示该文件。')); }}
         />
-      ) : contextOpen && snapshot && canShowContext ? <ContextDock snapshot={snapshot} runtime={runtime} runtimeLoading={runtimeLoading} onRefreshRuntime={onRefreshRuntime} onAnswer={onAnswer} onDismiss={onDismiss} onClose={() => setContextOpen(false)} /> : null}
+      ) : contextOpen && selectedBackgroundTask ? (
+        <BackgroundTaskPanel task={selectedBackgroundTask} onClose={() => { setSelectedTaskId(undefined); setContextOpen(false); }} />
+      ) : contextOpen && snapshot && canShowContext ? <ContextDock snapshot={snapshot} runtime={runtime} runtimeLoading={runtimeLoading} onRefreshRuntime={onRefreshRuntime} onSelectTask={(taskId) => { setSelectedTaskId(taskId); setSelectedDiff(undefined); setContextOpen(true); }} onAnswer={onAnswer} onDismiss={onDismiss} onClose={() => setContextOpen(false)} /> : null}
     </main>
   );
 }
