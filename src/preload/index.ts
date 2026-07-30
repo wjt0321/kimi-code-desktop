@@ -8,11 +8,13 @@ import {
   CompactSessionRequestSchema,
   CheckCliUpdateRequestSchema,
   CopyTextRequestSchema,
+  CreateWorkspaceFolderRequestSchema,
   CreateTaskRequestSchema,
   DesktopCapabilitySnapshotSchema,
   DesktopCliUpdateSnapshotSchema,
   DesktopMessageSchema,
   DesktopModelSchema,
+  DesktopSessionPageSchema,
   DesktopSessionRuntimeSchema,
   DesktopSessionSchema,
   DesktopStatusSchema,
@@ -22,10 +24,13 @@ import {
   SetThemeRequestSchema,
   DesktopWorkspaceSchema,
   ForkSessionRequestSchema,
+  ListSessionsRequestSchema,
   PromptRequestSchema,
   QuestionDismissRequestSchema,
   QuestionResponseRequestSchema,
+  RemoveWorkspaceRequestSchema,
   RenameSessionRequestSchema,
+  RenameWorkspaceRequestSchema,
   RestoreSessionRequestSchema,
   RevealPathRequestSchema,
   SessionIdSchema,
@@ -40,6 +45,7 @@ import {
   type CompactSessionRequest,
   type CopyTextRequest,
   type DesktopSession,
+  type DesktopSessionPage,
   type DesktopSessionRuntime,
   type DesktopStatus,
   type DesktopTaskEvent,
@@ -47,8 +53,11 @@ import {
   type DesktopThemeSnapshot,
   type DesktopWorkspace,
   type ForkSessionRequest,
+  type ListSessionsRequest,
   type PromptRequest,
+  type RemoveWorkspaceRequest,
   type RenameSessionRequest,
+  type RenameWorkspaceRequest,
   type RestoreSessionRequest,
   type RevealPathRequest,
   type UndoSessionRequest,
@@ -79,6 +88,10 @@ function parseCapabilities(value: unknown): DesktopCapabilitySnapshot {
 
 function parseSession(value: unknown): DesktopSession {
   return DesktopSessionSchema.parse(value);
+}
+
+function parseSessionPage(value: unknown): DesktopSessionPage {
+  return DesktopSessionPageSchema.parse(value);
 }
 
 function parseSessionRuntime(value: unknown): DesktopSessionRuntime {
@@ -175,6 +188,10 @@ contextBridge.exposeInMainWorld('desktop', {
   listWorkspaces: () => ipcRenderer.invoke('desktop:list-workspaces').then(parseWorkspaces),
   chooseWorkspaceFolder: () => ipcRenderer.invoke('desktop:choose-workspace-folder').then(parseFolder),
   createWorkspace: (input: { root: string }) => ipcRenderer.invoke('desktop:create-workspace', WorkspaceRootRequestSchema.parse(input)).then(parseWorkspace),
+  createWorkspaceFolder: (input: { name: string }) => ipcRenderer.invoke('desktop:create-workspace-folder', CreateWorkspaceFolderRequestSchema.parse(input)).then((value: unknown) => value === null ? null : parseWorkspace(value)),
+  renameWorkspace: (input: RenameWorkspaceRequest) => ipcRenderer.invoke('desktop:rename-workspace', RenameWorkspaceRequestSchema.parse(input)).then(parseWorkspace),
+  removeWorkspace: (input: RemoveWorkspaceRequest) => ipcRenderer.invoke('desktop:remove-workspace', RemoveWorkspaceRequestSchema.parse(input)),
+  listSessionPage: (input: ListSessionsRequest) => ipcRenderer.invoke('desktop:list-session-page', ListSessionsRequestSchema.parse(input)).then(parseSessionPage),
   listSessions: () => ipcRenderer.invoke('desktop:list-sessions').then(parseSessions),
   listArchivedSessions: () => ipcRenderer.invoke('desktop:list-archived-sessions').then(parseSessions),
   getSessionRuntime: (sessionId: string) => ipcRenderer.invoke('desktop:get-session-runtime', SessionIdSchema.parse(sessionId)).then(parseSessionRuntime),

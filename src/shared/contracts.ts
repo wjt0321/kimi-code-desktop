@@ -129,6 +129,29 @@ export const WorkspaceRootRequestSchema = z.object({
 
 export type WorkspaceRootRequest = z.infer<typeof WorkspaceRootRequestSchema>;
 
+export const CreateWorkspaceFolderRequestSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+});
+export type CreateWorkspaceFolderRequest = z.infer<typeof CreateWorkspaceFolderRequestSchema>;
+
+export const RenameWorkspaceRequestSchema = z.object({
+  workspaceId: z.string().min(1).max(200),
+  name: z.string().trim().min(1).max(120),
+});
+export type RenameWorkspaceRequest = z.infer<typeof RenameWorkspaceRequestSchema>;
+
+export const RemoveWorkspaceRequestSchema = z.object({
+  workspaceId: z.string().min(1).max(200),
+});
+export type RemoveWorkspaceRequest = z.infer<typeof RemoveWorkspaceRequestSchema>;
+
+export const ListSessionsRequestSchema = z.object({
+  workspaceId: z.string().min(1).max(200).optional(),
+  beforeId: z.string().min(1).max(200).optional(),
+  pageSize: z.number().int().min(1).max(100).default(20),
+});
+export type ListSessionsRequest = z.infer<typeof ListSessionsRequestSchema>;
+
 export const DesktopSessionSchema = z.object({
   id: SessionIdSchema,
   title: z.string(),
@@ -145,6 +168,12 @@ export const DesktopSessionSchema = z.object({
 });
 
 export type DesktopSession = z.infer<typeof DesktopSessionSchema>;
+
+export const DesktopSessionPageSchema = z.object({
+  items: z.array(DesktopSessionSchema),
+  hasMore: z.boolean(),
+});
+export type DesktopSessionPage = z.infer<typeof DesktopSessionPageSchema>;
 
 export const DesktopMessageSchema = z.object({
   id: z.string(),

@@ -2,12 +2,14 @@ import type {
   ApprovalDecisionRequest,
   CompactSessionRequest,
   CopyTextRequest,
+  CreateWorkspaceFolderRequest,
   CreateTaskRequest,
   DesktopCapabilitySnapshot,
   DesktopCliUpdateSnapshot,
   DesktopMessage,
   DesktopModel,
   DesktopSession,
+  DesktopSessionPage,
   DesktopSessionRuntime,
   DesktopStatus,
   DesktopTaskEvent,
@@ -16,10 +18,13 @@ import type {
   SetThemeRequest,
   DesktopWorkspace,
   ForkSessionRequest,
+  ListSessionsRequest,
   PromptRequest,
   QuestionDismissRequest,
   QuestionResponseRequest,
+  RemoveWorkspaceRequest,
   RenameSessionRequest,
+  RenameWorkspaceRequest,
   RestoreSessionRequest,
   RevealPathRequest,
   TaskWatchRequest,
@@ -48,6 +53,10 @@ export interface DesktopApi {
   listWorkspaces(): Promise<DesktopWorkspace[]>;
   chooseWorkspaceFolder(): Promise<string | null>;
   createWorkspace(input: WorkspaceRootRequest): Promise<DesktopWorkspace>;
+  createWorkspaceFolder(input: CreateWorkspaceFolderRequest): Promise<DesktopWorkspace | null>;
+  renameWorkspace(input: RenameWorkspaceRequest): Promise<DesktopWorkspace>;
+  removeWorkspace(input: RemoveWorkspaceRequest): Promise<void>;
+  listSessionPage(input: ListSessionsRequest): Promise<DesktopSessionPage>;
   listSessions(): Promise<DesktopSession[]>;
   listArchivedSessions(): Promise<DesktopSession[]>;
   getSessionRuntime(sessionId: string): Promise<DesktopSessionRuntime>;

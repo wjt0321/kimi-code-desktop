@@ -7,11 +7,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   ApprovalDecisionRequestSchema,
   CheckCliUpdateRequestSchema,
+  CreateWorkspaceFolderRequestSchema,
   CreateTaskRequestSchema,
+  ListSessionsRequestSchema,
   PromptRequestSchema,
   QuestionDismissRequestSchema,
   QuestionResponseRequestSchema,
+  RemoveWorkspaceRequestSchema,
   RenameSessionRequestSchema,
+  RenameWorkspaceRequestSchema,
   SessionIdSchema,
   SetThemeRequestSchema,
   type ResolvedTheme,
@@ -34,6 +38,7 @@ import { createCliUpdateCacheStore } from './update/update-cache';
 import { fetchLatestCliRelease } from './update/update-manifest';
 import { discoverInstallSource } from './update/install-source';
 import { createUpdateProcessRunner } from './update/update-process';
+import { createWorkspaceFolder } from './workspace/workspace-folder';
 import { createCloseRequestController, resolveWindowIconPath, resolveWindowTheme } from './window-behavior';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -145,6 +150,20 @@ function registerIpc(
     const request = WorkspaceRootRequestSchema.parse(input);
     return client.createWorkspace(request.root);
   });
+  ipcMain.handle('desktop:create-workspace-folder', async (_event, input: unknown) => {
+    const request = CreateWorkspaceFolderRequestSchema.parse(input);
+    const result = await dialog.showOpenDialog({
+      title: '选择新工作区的父文件夹',
+      buttonLabel: '在这里创建',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths[0] === undefined) return null;
+    const root = await createWorkspaceFolder(result.filePaths[0], request.name);
+    return client.createWorkspace(root);
+  });
+  ipcMain.handle('desktop:rename-workspace', (_event, input: unknown) => client.renameWorkspace(RenameWorkspaceRequestSchema.parse(input)));
+  ipcMain.handle('desktop:remove-workspace', (_event, input: unknown) => client.removeWorkspace(RemoveWorkspaceRequestSchema.parse(input)));
+  ipcMain.handle('desktop:list-session-page', (_event, input: unknown) => client.listSessionPage(ListSessionsRequestSchema.parse(input)));
   ipcMain.handle('desktop:list-sessions', () => client.listSessions());
   ipcMain.handle('desktop:list-archived-sessions', () => sessionHandlers.listArchived());
   ipcMain.handle('desktop:get-session-runtime', (_event, sessionId: unknown) => sessionHandlers.getRuntime(sessionId));

@@ -1,4 +1,5 @@
 import {
+  DesktopSessionPageSchema,
   DesktopSessionRuntimeSchema,
   DesktopSessionSchema,
   DesktopTaskSnapshotSchema,
@@ -11,10 +12,14 @@ import {
   type DesktopMessage,
   type DesktopModel,
   type DesktopSession,
+  type DesktopSessionPage,
   type DesktopSessionRuntime,
   type DesktopTaskSnapshot,
   type DesktopWorkspace,
   type ForkSessionRequest,
+  type ListSessionsRequest,
+  type RemoveWorkspaceRequest,
+  type RenameWorkspaceRequest,
   type QuestionDismissRequest,
   type QuestionResponseRequest,
   type RestoreSessionRequest,
@@ -68,6 +73,44 @@ export class KimiDesktopClient {
       body: JSON.stringify({ root }),
     });
     return toDesktopWorkspace(data);
+  }
+
+  async renameWorkspace(input: RenameWorkspaceRequest): Promise<DesktopWorkspace> {
+    try {
+      const data = await this.request(`/workspaces/${encodeURIComponent(input.workspaceId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: input.name }),
+      });
+      return toDesktopWorkspace(data);
+    } catch (error) {
+      if (isUnsupportedCapability(error)) throw new Error('当前 Kimi Code CLI 版本暂不支持重命名工作区。');
+      throw error;
+    }
+  }
+
+  async removeWorkspace(input: RemoveWorkspaceRequest): Promise<void> {
+    try {
+      await this.request(`/workspaces/${encodeURIComponent(input.workspaceId)}`, { method: 'DELETE' });
+    } catch (error) {
+      if (isUnsupportedCapability(error)) throw new Error('当前 Kimi Code CLI 版本暂不支持清除工作区。');
+      throw error;
+    }
+  }
+
+  async listSessionPage(input: ListSessionsRequest): Promise<DesktopSessionPage> {
+    const query = [
+      `page_size=${input.pageSize}`,
+      'include_archive=false',
+    ];
+    if (input.workspaceId !== undefined) query.push(`workspace_id=${encodeURIComponent(input.workspaceId)}`);
+    if (input.beforeId !== undefined) query.push(`before_id=${encodeURIComponent(input.beforeId)}`);
+    const data = await this.request(`/sessions?${query.join('&')}`, undefined);
+    const record = readRecord(data, '本地服务返回了不支持的任务分页响应');
+    return DesktopSessionPageSchema.parse({
+      items: readItems(record).map(toDesktopSession),
+      hasMore: readBoolean(record.has_more) ?? false,
+    });
   }
 
   async listSessions(): Promise<DesktopSession[]> {

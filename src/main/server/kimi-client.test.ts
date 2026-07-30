@@ -4,6 +4,59 @@ import { LocalServiceRequestError } from './server-lifecycle';
 import { KimiDesktopClient } from './kimi-client';
 
 describe('KimiDesktopClient', () => {
+  it('lists a workspace session page with encoded pagination filters', async () => {
+    const request = vi.fn(async () => ({
+      code: 0,
+      msg: 'success',
+      data: {
+        items: [{
+          id: 'session-page',
+          title: '分页任务',
+          updated_at: '2026-07-30T12:00:00.000Z',
+          busy: false,
+          workspace_id: 'w 1',
+          metadata: { cwd: 'D:\\workspace' },
+        }],
+        has_more: true,
+      },
+    }));
+    const client = new KimiDesktopClient({ request });
+
+    await expect(client.listSessionPage({ workspaceId: 'w 1', pageSize: 20, beforeId: 's/20' })).resolves.toEqual({
+      items: [expect.objectContaining({ id: 'session-page', workspaceId: 'w 1' })],
+      hasMore: true,
+    });
+    expect(request).toHaveBeenCalledWith('/sessions?page_size=20&include_archive=false&workspace_id=w%201&before_id=s%2F20', undefined);
+  });
+
+  it('renames and unregisters a workspace without touching local files', async () => {
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        return { code: 0, msg: 'success', data: { id: 'w1', name: '新名称', root: 'D:\\repo', session_count: 3 } };
+      }
+      return { code: 0, msg: 'success', data: null };
+    });
+    const client = new KimiDesktopClient({ request });
+
+    await expect(client.renameWorkspace({ workspaceId: 'w1', name: '新名称' })).resolves.toEqual({
+      id: 'w1', name: '新名称', root: 'D:\\repo', sessionCount: 3,
+    });
+    await expect(client.removeWorkspace({ workspaceId: 'w1' })).resolves.toBeUndefined();
+    expect(request).toHaveBeenNthCalledWith(1, '/workspaces/w1', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '新名称' }),
+    });
+    expect(request).toHaveBeenNthCalledWith(2, '/workspaces/w1', { method: 'DELETE' });
+  });
+
+  it('reports unsupported workspace mutations without destructive fallback', async () => {
+    const client = new KimiDesktopClient({ request: vi.fn(async () => {
+      throw new LocalServiceRequestError('not found', 404);
+    }) });
+
+    await expect(client.removeWorkspace({ workspaceId: 'old' })).rejects.toThrow('当前 Kimi Code CLI 版本暂不支持清除工作区');
+  });
   it('unwraps the installed CLI envelope before mapping a selected workspace', async () => {
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       expect(path).toBe('/workspaces');
