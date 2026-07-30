@@ -10,6 +10,7 @@ import type {
   QuestionDismissRequest,
   QuestionResponseRequest,
 } from '../../shared/contracts';
+import { useSessionRuntime } from './useSessionRuntime';
 
 export function useWorkbench(connected: boolean) {
   const [workspaces, setWorkspaces] = useState<DesktopWorkspace[]>([]);
@@ -19,11 +20,23 @@ export function useWorkbench(connected: boolean) {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>();
   const [selectedSessionId, setSelectedSessionId] = useState<string>();
   const [snapshot, setSnapshot] = useState<DesktopTaskSnapshot>();
+  const [archivedSessions, setArchivedSessions] = useState<DesktopSession[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [composerDraft, setComposerDraft] = useState<{ revision: number; text: string }>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const selectedSessionIdRef = useRef(selectedSessionId);
   const snapshotRevision = useRef(0);
   selectedSessionIdRef.current = selectedSessionId;
+  const {
+    runtime,
+    loading: runtimeLoading,
+    updating: runtimeUpdating,
+    error: runtimeError,
+    refresh: refreshRuntime,
+    scheduleRefresh: scheduleRuntimeRefresh,
+    update: updateSessionRuntime,
+  } = useSessionRuntime(connected, selectedSessionId);
 
   const refreshOverview = useCallback(async () => {
     if (!connected) return;
@@ -205,6 +218,105 @@ export function useWorkbench(connected: boolean) {
     }
   }, [refreshOverview]);
 
+
+  const loadArchivedSessions = useCallback(async () => {
+    if (!connected) return [];
+    setArchivedLoading(true);
+    try {
+      const next = await window.desktop.listArchivedSessions();
+      setArchivedSessions(next);
+      return next;
+    } catch {
+      setError('无法加载已归档任务。');
+      return [];
+    } finally {
+      setArchivedLoading(false);
+    }
+  }, [connected]);
+
+  const ensureIdleSession = useCallback((): string | undefined => {
+    const sessionId = selectedSessionIdRef.current;
+    const current = sessions.find((session) => session.id === sessionId);
+    if (!sessionId || !current) return undefined;
+    if (current.busy) {
+      setError('当前任务正在运行，任务运行时不可执行这个操作。');
+      return undefined;
+    }
+    return sessionId;
+  }, [sessions]);
+
+  const compactTask = useCallback(async (instruction?: string): Promise<boolean> => {
+    const sessionId = ensureIdleSession();
+    if (!sessionId) return false;
+    try {
+      await window.desktop.compactSession({ sessionId, instruction });
+      await Promise.all([refreshOverview(), refreshSnapshot(sessionId)]);
+      scheduleRuntimeRefresh();
+      return true;
+    } catch {
+      setError('无法压缩当前任务的上下文。');
+      return false;
+    }
+  }, [ensureIdleSession, refreshOverview, refreshSnapshot, scheduleRuntimeRefresh]);
+
+  const undoTask = useCallback(async (): Promise<boolean> => {
+    const sessionId = ensureIdleSession();
+    if (!sessionId) return false;
+    const latestUserEntry = [...(snapshot?.timeline ?? [])].reverse().find((entry) => entry.kind === 'text' && entry.role === 'user');
+    const draftText = latestUserEntry?.kind === 'text' ? latestUserEntry.text : undefined;
+    if (!draftText) {
+      setError('当前任务没有可以撤回的用户请求。');
+      return false;
+    }
+    try {
+      await window.desktop.undoSession({ sessionId, count: 1 });
+      await Promise.all([refreshOverview(), refreshSnapshot(sessionId)]);
+      setComposerDraft((current) => ({ revision: (current?.revision ?? 0) + 1, text: draftText }));
+      scheduleRuntimeRefresh();
+      return true;
+    } catch {
+      setError('无法撤回当前任务的上一轮请求。');
+      return false;
+    }
+  }, [ensureIdleSession, refreshOverview, refreshSnapshot, scheduleRuntimeRefresh, snapshot?.timeline]);
+
+  const forkTask = useCallback(async (title?: string): Promise<boolean> => {
+    const sessionId = ensureIdleSession();
+    if (!sessionId) return false;
+    try {
+      const next = await window.desktop.forkSession({ sessionId, title });
+      await refreshOverview();
+      selectTask(next.id);
+      return true;
+    } catch {
+      setError('无法从当前上下文派生新任务。');
+      return false;
+    }
+  }, [ensureIdleSession, refreshOverview, selectTask]);
+
+  const restoreTask = useCallback(async (sessionId: string): Promise<boolean> => {
+    try {
+      const restored = await window.desktop.restoreSession({ sessionId });
+      setArchivedSessions((current) => current.filter((session) => session.id !== sessionId));
+      await refreshOverview();
+      selectTask(restored.id);
+      return true;
+    } catch {
+      setError('无法恢复这个已归档任务。');
+      return false;
+    }
+  }, [refreshOverview, selectTask]);
+
+  const updateRuntime = useCallback(async (patch: Parameters<typeof updateSessionRuntime>[0]): Promise<boolean> => {
+    try {
+      await updateSessionRuntime(patch);
+      return true;
+    } catch {
+      setError('无法更新当前任务的运行策略。');
+      return false;
+    }
+  }, [updateSessionRuntime]);
+
   useEffect(() => {
     if (!connected) {
       snapshotRevision.current += 1;
@@ -216,6 +328,8 @@ export function useWorkbench(connected: boolean) {
       setSelectedWorkspaceId(undefined);
       setSelectedSessionId(undefined);
       setSnapshot(undefined);
+      setArchivedSessions([]);
+      setComposerDraft(undefined);
       return;
     }
     void refreshOverview();
@@ -232,10 +346,13 @@ export function useWorkbench(connected: boolean) {
   useEffect(() => {
     if (!connected) return;
     return window.desktop.onTaskEvent((event) => {
-      if (event.sessionId === selectedSessionIdRef.current) void refreshSnapshot(event.sessionId);
+      if (event.sessionId === selectedSessionIdRef.current) {
+        void refreshSnapshot(event.sessionId);
+        scheduleRuntimeRefresh();
+      }
       void refreshOverview();
     });
-  }, [connected, refreshOverview, refreshSnapshot]);
+  }, [connected, refreshOverview, refreshSnapshot, scheduleRuntimeRefresh]);
 
   useEffect(() => () => {
     void window.desktop.unwatchTask(selectedSessionIdRef.current);
@@ -259,8 +376,14 @@ export function useWorkbench(connected: boolean) {
     selectedSession,
     selectedSessionId,
     snapshot,
+    runtime,
+    runtimeLoading,
+    runtimeUpdating,
+    archivedSessions,
+    archivedLoading,
+    composerDraft,
     loading,
-    error,
+    error: error ?? runtimeError,
     actions: {
       refreshOverview,
       selectWorkspace,
@@ -276,6 +399,14 @@ export function useWorkbench(connected: boolean) {
       dismissQuestion,
       renameTask,
       archiveTask,
+      loadArchivedSessions,
+      compactTask,
+      undoTask,
+      forkTask,
+      restoreTask,
+      refreshRuntime,
+      updateRuntime,
+      clearComposerDraft: () => setComposerDraft(undefined),
       clearError: () => setError(undefined),
     },
   };

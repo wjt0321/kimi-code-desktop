@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { DesktopSession, DesktopTaskSnapshot, DesktopWorkspace } from '../../shared/contracts';
+import type { DesktopSession, DesktopSessionRuntime, DesktopTaskSnapshot, DesktopWorkspace } from '../../shared/contracts';
 import { useWorkbench } from './useWorkbench';
 
 const workspace: DesktopWorkspace = { id: 'ws_1', name: '示例仓库', root: 'C:\\repo', sessionCount: 1 };
@@ -36,6 +36,13 @@ const desktopApi = {
   onTaskEvent: vi.fn<(listener: (event: { sessionId: string; kind: 'refresh'; seq?: number }) => void) => () => void>(),
   renameSession: vi.fn<(input: { sessionId: string; title: string }) => Promise<void>>(),
   archiveSession: vi.fn<(sessionId: string) => Promise<void>>(),
+  listArchivedSessions: vi.fn<() => Promise<DesktopSession[]>>(),
+  getSessionRuntime: vi.fn<(sessionId: string) => Promise<DesktopSessionRuntime>>(),
+  updateSessionRuntime: vi.fn(),
+  compactSession: vi.fn(),
+  undoSession: vi.fn(),
+  forkSession: vi.fn(),
+  restoreSession: vi.fn(),
 };
 
 let taskListener: ((event: { sessionId: string; kind: 'refresh'; seq?: number }) => void) | undefined;
@@ -51,6 +58,33 @@ beforeEach(() => {
   desktopApi.unwatchTask.mockResolvedValue();
   desktopApi.renameSession.mockResolvedValue();
   desktopApi.archiveSession.mockResolvedValue();
+  desktopApi.listArchivedSessions.mockResolvedValue([]);
+  desktopApi.getSessionRuntime.mockResolvedValue({
+    available: true,
+    model: 'kimi-code/k3',
+    thinkingLevel: 'high',
+    permission: 'manual',
+    planMode: false,
+    swarmMode: false,
+    contextTokens: 0,
+    maxContextTokens: 128000,
+    contextUsage: 0,
+    warnings: [],
+  });
+  desktopApi.updateSessionRuntime.mockImplementation(async (input) => ({
+    available: true,
+    model: 'kimi-code/k3',
+    thinkingLevel: input.thinkingLevel ?? 'high',
+    permission: input.permission ?? 'manual',
+    planMode: input.planMode ?? false,
+    swarmMode: false,
+    contextTokens: 0,
+    maxContextTokens: 128000,
+    contextUsage: 0,
+    warnings: [],
+  }));
+  desktopApi.compactSession.mockResolvedValue(undefined);
+  desktopApi.undoSession.mockResolvedValue(undefined);
   desktopApi.onTaskEvent.mockImplementation((listener) => {
     taskListener = listener;
     return () => { taskListener = undefined; };
@@ -95,4 +129,64 @@ describe('useWorkbench', () => {
     expect(desktopApi.archiveSession).toHaveBeenCalledWith('session-1');
     expect(desktopApi.listSessions).toHaveBeenCalledTimes(3);
   });
+
+  it('undoes the last turn and restores the latest user prompt as a composer draft', async () => {
+    const idleSession = { ...session, busy: false };
+    const idleSnapshot: DesktopTaskSnapshot = {
+      ...snapshot,
+      session: idleSession,
+      timeline: [
+        { id: 'u1', kind: 'text', role: 'user', text: '第一次请求', state: 'complete' },
+        { id: 'a1', kind: 'text', role: 'assistant', text: '第一次回答', state: 'complete' },
+        { id: 'u2', kind: 'text', role: 'user', text: '请重新检查测试', state: 'complete' },
+      ],
+      status: { phase: 'idle' },
+    };
+    desktopApi.listSessions.mockResolvedValue([idleSession]);
+    desktopApi.getTaskSnapshot.mockResolvedValue(idleSnapshot);
+    const { result } = renderHook(() => useWorkbench(true));
+    await waitFor(() => expect(result.current.snapshot?.timeline).toHaveLength(3));
+
+    await act(async () => { await result.current.actions.undoTask(); });
+
+    expect(desktopApi.undoSession).toHaveBeenCalledWith({ sessionId: 'session-1', count: 1 });
+    expect(result.current.composerDraft?.text).toBe('请重新检查测试');
+  });
+
+  it('forks, lists archived tasks, and restores an archived task', async () => {
+    const idleSession = { ...session, busy: false };
+    const forked = { ...idleSession, id: 'forked-1', title: '派生任务' };
+    const archived = { ...idleSession, id: 'archived-1', title: '归档任务' };
+    desktopApi.listSessions.mockResolvedValue([idleSession]);
+    desktopApi.getTaskSnapshot.mockResolvedValue({ ...snapshot, session: idleSession, status: { phase: 'idle' } });
+    desktopApi.forkSession.mockResolvedValue(forked);
+    desktopApi.listArchivedSessions.mockResolvedValue([archived]);
+    desktopApi.restoreSession.mockResolvedValue(archived);
+    const { result } = renderHook(() => useWorkbench(true));
+    await waitFor(() => expect(result.current.selectedSession?.busy).toBe(false));
+
+    await act(async () => { await result.current.actions.forkTask('派生任务'); });
+    expect(desktopApi.forkSession).toHaveBeenCalledWith({ sessionId: 'session-1', title: '派生任务' });
+    expect(result.current.selectedSessionId).toBe('forked-1');
+
+    await act(async () => { await result.current.actions.loadArchivedSessions(); });
+    expect(result.current.archivedSessions).toEqual([archived]);
+    await act(async () => { await result.current.actions.restoreTask('archived-1'); });
+    expect(desktopApi.restoreSession).toHaveBeenCalledWith({ sessionId: 'archived-1' });
+  });
+
+  it('does not run structural actions while the selected task is busy', async () => {
+    const { result } = renderHook(() => useWorkbench(true));
+    await waitFor(() => expect(result.current.selectedSession?.busy).toBe(true));
+
+    await act(async () => { await result.current.actions.compactTask('保留决策'); });
+    await act(async () => { await result.current.actions.undoTask(); });
+    await act(async () => { await result.current.actions.forkTask(); });
+
+    expect(desktopApi.compactSession).not.toHaveBeenCalled();
+    expect(desktopApi.undoSession).not.toHaveBeenCalled();
+    expect(desktopApi.forkSession).not.toHaveBeenCalled();
+    expect(result.current.error).toContain('任务运行时');
+  });
+
 });
