@@ -23,11 +23,12 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { CreateTaskRequest, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace, UpdateRuntimeRequest } from '../../../shared/contracts';
+import type { CreateTaskRequest, DesktopDiffTarget, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace, UpdateRuntimeRequest } from '../../../shared/contracts';
 import kimiBanner from '../../assets/kimi-banner-dark.svg';
 import kimiIcon from '../../assets/kimi-icon.svg';
 import { ArchivedSessionsDialog } from './ArchivedSessionsDialog';
 import { ContextDock } from './ContextDock';
+import { DiffReviewPanel } from './DiffReviewPanel';
 import { NewTaskDialog } from './NewTaskDialog';
 import { SessionActionDialogs, type SessionDialogAction } from './SessionActionDialogs';
 import { SessionActionsMenu } from './SessionActionsMenu';
@@ -133,6 +134,8 @@ export function WorkbenchShell({
   onDismissError = () => undefined,
 }: WorkbenchShellProps) {
   const [contextOpen, setContextOpen] = useState(false);
+  const [selectedDiff, setSelectedDiff] = useState<DesktopDiffTarget>();
+  const [reviewError, setReviewError] = useState<string>();
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('kimi-desktop:sidebar') === 'collapsed');
@@ -150,7 +153,8 @@ export function WorkbenchShell({
 
   const connected = status.server.kind === 'connected';
   const attentionCount = snapshot ? snapshot.approvals.length + snapshot.questions.length : 0;
-  const canShowContext = Boolean(snapshot && (attentionCount > 0 || snapshot.todos.length > 0 || snapshot.tasks.length > 0 || runtime !== undefined || runtimeLoading));
+  const canShowContext = Boolean(selectedDiff || (snapshot && (attentionCount > 0 || snapshot.todos.length > 0 || snapshot.tasks.length > 0 || runtime !== undefined || runtimeLoading)));
+  const visibleError = reviewError ?? error;
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId);
   const statusSummary = presentWorkbenchStatus(status, selectedSession, snapshot);
   const filteredSessions = useMemo(() => filterSessions(sessions, query), [query, sessions]);
@@ -353,11 +357,11 @@ export function WorkbenchShell({
           </div>
         </header>
 
-        {error ? <div className="workbench-error" role="alert"><span>{error}</span><button type="button" aria-label="关闭错误提示" onClick={onDismissError}><X size={14} /></button></div> : null}
+        {visibleError ? <div className="workbench-error" role="alert"><span>{visibleError}</span><button type="button" aria-label="关闭错误提示" onClick={() => { if (reviewError) setReviewError(undefined); else onDismissError(); }}><X size={14} /></button></div> : null}
 
         {selectedSession ? (
           <div className="task-canvas">
-            <TaskTimeline snapshot={snapshot} loading={loading} />
+            <TaskTimeline snapshot={snapshot} loading={loading} onOpenDiff={(target) => { setSelectedDiff(target); setContextOpen(true); }} />
             <TaskComposer disabled={!connected} busy={selectedSession.busy} models={models} selectedModelId={selectedModelId} runtime={runtime} runtimeUpdating={runtimeUpdating} draft={composerDraft} onDraftConsumed={onDraftConsumed} onModelChange={onSelectModel} onRuntimeChange={onRuntimeChange} onSubmit={onSendPrompt} />
           </div>
         ) : (
@@ -400,7 +404,15 @@ export function WorkbenchShell({
         </Dialog.Portal>
       </Dialog.Root>
 
-      {contextOpen && snapshot && canShowContext ? <ContextDock snapshot={snapshot} runtime={runtime} runtimeLoading={runtimeLoading} onRefreshRuntime={onRefreshRuntime} onApprove={onApprove} onReject={onReject} onAnswer={onAnswer} onDismiss={onDismiss} onClose={() => setContextOpen(false)} /> : null}
+      {contextOpen && selectedDiff ? (
+        <DiffReviewPanel
+          target={selectedDiff}
+          onClose={() => { setSelectedDiff(undefined); setContextOpen(false); }}
+          onCopyPath={(path) => { void window.desktop.copyText({ text: path }).catch(() => setReviewError('无法复制文件路径。')); }}
+          onCopyDiff={(text) => { void window.desktop.copyText({ text }).catch(() => setReviewError('无法复制差异内容。')); }}
+          onRevealPath={(path) => { void window.desktop.revealPath({ path }).catch(() => setReviewError('无法在资源管理器中显示该文件。')); }}
+        />
+      ) : contextOpen && snapshot && canShowContext ? <ContextDock snapshot={snapshot} runtime={runtime} runtimeLoading={runtimeLoading} onRefreshRuntime={onRefreshRuntime} onApprove={onApprove} onReject={onReject} onAnswer={onAnswer} onDismiss={onDismiss} onClose={() => setContextOpen(false)} /> : null}
     </main>
   );
 }

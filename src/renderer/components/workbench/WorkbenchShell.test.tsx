@@ -179,3 +179,55 @@ describe('WorkbenchShell', () => {
 
 
 });
+
+  it('opens and closes a complete file diff from the execution timeline', async () => {
+    const user = userEvent.setup();
+    const diffSnapshot: DesktopTaskSnapshot = {
+      ...snapshot,
+      timeline: [{
+        id: 'tool-edit',
+        kind: 'tool',
+        name: 'StrReplaceFile',
+        category: 'edit',
+        state: 'done',
+        title: '修改 app.ts',
+        summary: '已更新文件',
+        diff: {
+          id: 'call-edit',
+          title: 'app.ts',
+          path: 'C:\\repo\\src\\app.ts',
+          lines: [
+            { type: 'del', text: 'const value = 1;', oldNo: 1 },
+            { type: 'add', text: 'const value = 2;', newNo: 1 },
+          ],
+        },
+      }],
+    };
+
+    render(
+      <WorkbenchShell
+        status={status}
+        workspaces={[workspace]}
+        models={models}
+        selectedModelId={models[0].id}
+        selectedWorkspaceId={workspace.id}
+        sessions={[session]}
+        selectedSession={session}
+        snapshot={diffSnapshot}
+        runtime={runtime}
+        runtimeLoading={false}
+        runtimeUpdating={false}
+        loading={false}
+        error={undefined}
+        {...actions}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '展开修改 app.ts详情' }));
+    await user.click(screen.getByRole('button', { name: '查看完整差异' }));
+    expect(screen.getByRole('complementary', { name: '文件差异审阅' })).not.toBeNull();
+    expect(screen.getByRole('heading', { name: 'app.ts' })).not.toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '关闭差异审阅' }));
+    expect(screen.queryByRole('complementary', { name: '文件差异审阅' })).toBeNull();
+  });
