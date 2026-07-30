@@ -1,23 +1,39 @@
 import { ArrowUp, LoaderCircle, SquareTerminal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { DesktopModel } from '../../../shared/contracts';
+import type { DesktopModel, DesktopSessionRuntime, UpdateRuntimeRequest } from '../../../shared/contracts';
 import { ModelPicker } from './ModelPicker';
+import { RuntimeControls } from './RuntimeControls';
 
 interface TaskComposerProps {
   disabled: boolean;
   busy: boolean;
   models: DesktopModel[];
   selectedModelId: string | undefined;
+  runtime: DesktopSessionRuntime | undefined;
+  runtimeUpdating: boolean;
+  draft?: { revision: number; text: string };
+  onDraftConsumed?(): void;
   onModelChange(modelId: string): void;
+  onRuntimeChange(patch: Omit<UpdateRuntimeRequest, 'sessionId'>): void;
   onSubmit(text: string, modelId: string): Promise<void>;
 }
 
-export function TaskComposer({ disabled, busy, models, selectedModelId, onModelChange, onSubmit }: TaskComposerProps) {
+export function TaskComposer({ disabled, busy, models, selectedModelId, runtime, runtimeUpdating, draft, onDraftConsumed, onModelChange, onRuntimeChange, onSubmit }: TaskComposerProps) {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const appliedDraftRevision = useRef<number | undefined>(undefined);
+  const selectedModel = models.find((model) => model.id === selectedModelId);
   const canSend = !disabled && !submitting && text.trim().length > 0 && selectedModelId !== undefined;
+
+  useEffect(() => {
+    if (!draft || appliedDraftRevision.current === draft.revision) return;
+    appliedDraftRevision.current = draft.revision;
+    setText(draft.text);
+    inputRef.current?.focus();
+    onDraftConsumed?.();
+  }, [draft, onDraftConsumed]);
 
   useEffect(() => {
     const input = inputRef.current;
@@ -40,7 +56,7 @@ export function TaskComposer({ disabled, busy, models, selectedModelId, onModelC
   };
 
   return (
-    <div className="composer-shell">
+    <div className={`composer-shell ${runtime?.planMode ? 'composer-shell--plan' : ''}`}>
       {busy ? <div className="composer-queue-note"><LoaderCircle size={13} className="spin" /><span>当前任务正在运行，新请求会在发送后进入队列。</span></div> : null}
       <form className="task-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
         <textarea
@@ -68,6 +84,7 @@ export function TaskComposer({ disabled, busy, models, selectedModelId, onModelC
         <footer>
           <div className="composer-controls">
             <ModelPicker models={models} value={selectedModelId} disabled={disabled || submitting || models.length === 0} onValueChange={onModelChange} />
+            <RuntimeControls runtime={runtime} model={selectedModel} disabled={disabled || submitting} updating={runtimeUpdating} onChange={onRuntimeChange} />
             <span className="composer-mode"><SquareTerminal size={12} />本机执行</span>
           </div>
           <span className="task-composer__hint">{submitting ? '正在发送…' : selectedModelId ? 'Enter 发送 · Ctrl+Enter 换行' : '请先选择模型'}</span>

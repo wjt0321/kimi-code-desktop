@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { DesktopModel, DesktopSession, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace } from '../../../shared/contracts';
+import type { DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace } from '../../../shared/contracts';
 import { WorkbenchShell } from './WorkbenchShell';
 
 const status: DesktopStatus = {
@@ -31,6 +31,19 @@ const snapshot: DesktopTaskSnapshot = {
   status: { phase: 'tool', model: 'kimi-for-coding', permission: 'manual' },
 };
 
+const runtime: DesktopSessionRuntime = {
+  available: true,
+  model: 'kimi-code/k3',
+  thinkingLevel: 'high',
+  permission: 'manual',
+  planMode: true,
+  swarmMode: false,
+  contextTokens: 32000,
+  maxContextTokens: 128000,
+  contextUsage: 0.25,
+  warnings: [],
+};
+
 const actions = {
   onStart: vi.fn(),
   onStop: vi.fn(),
@@ -46,6 +59,8 @@ const actions = {
   onReject: vi.fn(),
   onAnswer: vi.fn(),
   onDismiss: vi.fn(),
+  onRuntimeChange: vi.fn(),
+  onDraftConsumed: vi.fn(),
 };
 
 afterEach(() => cleanup());
@@ -62,6 +77,9 @@ describe('WorkbenchShell', () => {
         sessions={[session]}
         selectedSession={session}
         snapshot={snapshot}
+        runtime={runtime}
+        runtimeLoading={false}
+        runtimeUpdating={false}
         loading={false}
         error={undefined}
         {...actions}
@@ -73,6 +91,9 @@ describe('WorkbenchShell', () => {
     expect(screen.getByText('等待审批')).not.toBeNull();
     expect(screen.getByText('正在运行 shell')).not.toBeNull();
     expect(screen.getByRole('textbox', { name: '向 Kimi Code 发送任务' })).not.toBeNull();
+    expect(screen.getByText('思考 高')).not.toBeNull();
+    expect(screen.getByText('计划模式')).not.toBeNull();
+    expect(screen.getByRole('button', { name: '思考强度：高' })).not.toBeNull();
     expect(screen.queryByRole('button', { name: '项目' })).toBeNull();
   });
 
@@ -91,6 +112,9 @@ describe('WorkbenchShell', () => {
         sessions={[]}
         selectedSession={undefined}
         snapshot={undefined}
+        runtime={undefined}
+        runtimeLoading={false}
+        runtimeUpdating={false}
         loading={false}
         error={undefined}
         {...actions}
@@ -118,6 +142,9 @@ describe('WorkbenchShell', () => {
         sessions={[session]}
         selectedSession={session}
         snapshot={snapshot}
+        runtime={runtime}
+        runtimeLoading={false}
+        runtimeUpdating={false}
         loading={false}
         error={undefined}
         {...actions}

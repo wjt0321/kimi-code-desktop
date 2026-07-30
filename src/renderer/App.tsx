@@ -53,6 +53,10 @@ export function App() {
         sessions={workbench.sessions}
         selectedSession={workbench.selectedSession}
         snapshot={workbench.snapshot}
+        runtime={workbench.runtime}
+        runtimeLoading={workbench.runtimeLoading}
+        runtimeUpdating={workbench.runtimeUpdating}
+        composerDraft={workbench.composerDraft}
         loading={workbench.loading}
         error={workbench.error}
         newTaskRequest={newTaskRequest}
@@ -63,6 +67,8 @@ export function App() {
         onSelectTask={workbench.actions.selectTask}
         onCreateTask={(input) => void workbench.actions.createTask(input)}
         onSelectModel={workbench.actions.selectModel}
+        onRuntimeChange={(patch) => void workbench.actions.updateRuntime(patch)}
+        onDraftConsumed={workbench.actions.clearComposerDraft}
         onChooseWorkspaceFolder={workbench.actions.chooseWorkspaceFolder}
         onCreateWorkspace={workbench.actions.createWorkspace}
         onSendPrompt={workbench.actions.sendPrompt}

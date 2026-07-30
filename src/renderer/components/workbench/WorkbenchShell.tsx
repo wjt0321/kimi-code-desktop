@@ -2,6 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import {
   Archive,
   Bot,
+  BrainCircuit,
   ChevronDown,
   CircleDot,
   Command,
@@ -16,6 +17,7 @@ import {
   PanelRight,
   Pencil,
   Plus,
+  Route,
   Search,
   Settings,
   Square,
@@ -23,7 +25,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { CreateTaskRequest, DesktopModel, DesktopSession, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace } from '../../../shared/contracts';
+import type { CreateTaskRequest, DesktopModel, DesktopSession, DesktopSessionRuntime, DesktopStatus, DesktopTaskSnapshot, DesktopWorkspace, UpdateRuntimeRequest } from '../../../shared/contracts';
 import kimiBanner from '../../assets/kimi-banner-dark.svg';
 import kimiIcon from '../../assets/kimi-icon.svg';
 import { ContextDock } from './ContextDock';
@@ -43,6 +45,10 @@ interface WorkbenchShellProps {
   sessions: DesktopSession[];
   selectedSession: DesktopSession | undefined;
   snapshot: DesktopTaskSnapshot | undefined;
+  runtime: DesktopSessionRuntime | undefined;
+  runtimeLoading: boolean;
+  runtimeUpdating: boolean;
+  composerDraft?: { revision: number; text: string };
   loading: boolean;
   error: string | undefined;
   newTaskRequest?: number;
@@ -53,6 +59,8 @@ interface WorkbenchShellProps {
   onSelectTask(sessionId: string): void;
   onCreateTask(input: CreateTaskRequest): void;
   onSelectModel(modelId: string): void;
+  onRuntimeChange(patch: Omit<UpdateRuntimeRequest, 'sessionId'>): void;
+  onDraftConsumed(): void;
   onChooseWorkspaceFolder(): Promise<string | null>;
   onCreateWorkspace(root: string): Promise<DesktopWorkspace | undefined>;
   onSendPrompt(text: string, modelId: string): Promise<void>;
@@ -75,6 +83,10 @@ export function WorkbenchShell({
   sessions,
   selectedSession,
   snapshot,
+  runtime,
+  runtimeLoading,
+  runtimeUpdating,
+  composerDraft,
   loading,
   error,
   newTaskRequest,
@@ -85,6 +97,8 @@ export function WorkbenchShell({
   onSelectTask,
   onCreateTask,
   onSelectModel,
+  onRuntimeChange,
+  onDraftConsumed,
   onChooseWorkspaceFolder,
   onCreateWorkspace,
   onSendPrompt,
@@ -281,9 +295,13 @@ export function WorkbenchShell({
             </div>
             {selectedSession ? (
               <div className="workbench-heading__meta">
-                {snapshot?.status.model || selectedSession.model ? <span><Bot size={12} />{snapshot?.status.model || selectedSession.model}</span> : null}
-                {snapshot?.status.permission || selectedSession.permission ? <span><Gauge size={12} />{permissionLabel(snapshot?.status.permission || selectedSession.permission)}</span> : null}
-                {snapshot?.status.contextUsage !== undefined ? <span>上下文 {Math.round(snapshot.status.contextUsage * 100)}%</span> : null}
+                {runtimeLoading ? <span><LoaderCircle size={12} className="spin" />正在读取运行策略</span> : null}
+                {runtime?.available && runtime.model ? <span><Bot size={12} />{runtime.model}</span> : null}
+                {runtime?.available ? <span><BrainCircuit size={12} />思考 {thinkingLabel(runtime.thinkingLevel)}</span> : null}
+                {runtime?.available ? <span><Gauge size={12} />{permissionLabel(runtime.permission)}</span> : null}
+                {runtime?.available && runtime.planMode ? <span className="runtime-badge--plan"><Route size={12} />计划模式</span> : null}
+                {runtime?.available ? <span>上下文 {Math.round(runtime.contextUsage * 100)}%</span> : null}
+                {runtime?.available === false ? <span>当前 CLI 不支持运行策略控制</span> : null}
               </div>
             ) : null}
           </div>
@@ -299,7 +317,7 @@ export function WorkbenchShell({
         {selectedSession ? (
           <div className="task-canvas">
             <TaskTimeline snapshot={snapshot} loading={loading} />
-            <TaskComposer disabled={!connected} busy={selectedSession.busy} models={models} selectedModelId={selectedModelId} onModelChange={onSelectModel} onSubmit={onSendPrompt} />
+            <TaskComposer disabled={!connected} busy={selectedSession.busy} models={models} selectedModelId={selectedModelId} runtime={runtime} runtimeUpdating={runtimeUpdating} draft={composerDraft} onDraftConsumed={onDraftConsumed} onModelChange={onSelectModel} onRuntimeChange={onRuntimeChange} onSubmit={onSendPrompt} />
           </div>
         ) : (
           <section className="workbench-empty">
@@ -340,6 +358,11 @@ export function WorkbenchShell({
       {contextOpen && snapshot && canShowContext ? <ContextDock snapshot={snapshot} onApprove={onApprove} onReject={onReject} onAnswer={onAnswer} onDismiss={onDismiss} onClose={() => setContextOpen(false)} /> : null}
     </main>
   );
+}
+
+function thinkingLabel(value: string): string {
+  const labels: Record<string, string> = { off: '关闭', on: '开启', minimal: '极简', low: '低', medium: '中', high: '高', max: '最高' };
+  return labels[value] ?? value;
 }
 
 function permissionLabel(permission: 'manual' | 'yolo' | 'auto' | undefined): string {

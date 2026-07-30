@@ -23,6 +23,9 @@ describe('TaskComposer', () => {
         busy={false}
         models={models}
         selectedModelId={undefined}
+        runtime={undefined}
+        runtimeUpdating={false}
+        onRuntimeChange={vi.fn()}
         onModelChange={onModelChange}
         onSubmit={onSubmit}
       />,
@@ -46,6 +49,9 @@ describe('TaskComposer', () => {
         busy={false}
         models={models}
         selectedModelId="kimi-code/k3"
+        runtime={undefined}
+        runtimeUpdating={false}
+        onRuntimeChange={vi.fn()}
         onModelChange={vi.fn()}
         onSubmit={onSubmit}
       />,
@@ -61,4 +67,43 @@ describe('TaskComposer', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect((input as HTMLTextAreaElement).value).toBe('第二行\n');
   });
+
+  it('restores an externally supplied undo draft and consumes it once', async () => {
+    const onDraftConsumed = vi.fn();
+    const { rerender } = render(
+      <TaskComposer
+        disabled={false}
+        busy={false}
+        models={models}
+        selectedModelId="kimi-code/k3"
+        runtime={undefined}
+        runtimeUpdating={false}
+        onRuntimeChange={vi.fn()}
+        draft={{ revision: 1, text: '请重新检查测试' }}
+        onDraftConsumed={onDraftConsumed}
+        onModelChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect((screen.getByLabelText('向 Kimi Code 发送任务') as HTMLTextAreaElement).value).toBe('请重新检查测试');
+    expect(onDraftConsumed).toHaveBeenCalledOnce();
+
+    rerender(
+      <TaskComposer
+        disabled={false}
+        busy={false}
+        models={models}
+        selectedModelId="kimi-code/k3"
+        runtime={undefined}
+        runtimeUpdating={false}
+        onRuntimeChange={vi.fn()}
+        draft={{ revision: 1, text: '不应重复覆盖' }}
+        onDraftConsumed={onDraftConsumed}
+        onModelChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect((screen.getByLabelText('向 Kimi Code 发送任务') as HTMLTextAreaElement).value).toBe('请重新检查测试');
+  });
+
 });
