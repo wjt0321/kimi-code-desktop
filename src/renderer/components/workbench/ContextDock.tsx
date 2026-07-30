@@ -2,6 +2,7 @@ import { AlertTriangle, BrainCircuit, ChevronRight, CircleHelp, Gauge, LoaderCir
 import { useState } from 'react';
 
 import type { DesktopQuestion, DesktopSessionRuntime, DesktopTaskSnapshot } from '../../../shared/contracts';
+import { presentBackgroundTask } from './background-task-presentation';
 
 interface ContextDockProps {
   snapshot: DesktopTaskSnapshot;
@@ -61,7 +62,10 @@ export function ContextDock({ snapshot, runtime, runtimeLoading, onRefreshRuntim
       {snapshot.tasks.length ? (
         <section className="context-section">
           <h2>后台活动</h2>
-          {snapshot.tasks.map((task) => <button key={task.id} type="button" className="context-activity" aria-label={`查看后台任务：${task.title}`} onClick={() => onSelectTask(task.id)}><span><strong>{task.title}</strong><small>{taskKindLabel(task.kind)}</small></span><em className={`context-task-state context-task-state--${task.state}`}>{taskStateLabel(task.state)}</em></button>)}
+          {snapshot.tasks.map((task) => {
+            const presentation = presentBackgroundTask(task);
+            return <button key={task.id} type="button" className="context-activity" aria-label={`查看后台任务：${task.title}`} onClick={() => onSelectTask(task.id)}><span><strong>{task.title}</strong><small>{presentation.kindLabel}</small></span><em className={`context-task-state context-task-state--${presentation.tone}`}>{presentation.stateLabel}</em></button>;
+          })}
         </section>
       ) : null}
     </aside>
@@ -151,14 +155,4 @@ function focusApproval(approvalId: string): void {
   const target = document.getElementById(`approval-${approvalId}`);
   target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   target?.focus({ preventScroll: true });
-}
-
-function taskStateLabel(state: DesktopTaskSnapshot['tasks'][number]['state']): string {
-  const labels = { running: '运行中', completed: '已完成', failed: '失败', timed_out: '已超时', killed: '已终止', lost: '已失联' } as const;
-  return labels[state];
-}
-
-function taskKindLabel(kind: DesktopTaskSnapshot['tasks'][number]['kind']): string {
-  const labels = { shell: '后台命令', subagent: '子 Agent', tool: '工具任务', other: '后台任务' } as const;
-  return labels[kind];
 }

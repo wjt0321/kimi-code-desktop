@@ -84,6 +84,42 @@ describe('projectTranscript', () => {
     expect(projected.approvals[1].block).toMatchObject({ kind: 'diff', path: 'a.ts' });
     expect(projected.approvals[2].block).toEqual({ kind: 'generic', summary: 'review' });
   });
+  it('keeps live task detail while remaining compatible with old snapshots', () => {
+    const projected = projectTranscript({
+      agent_id: 'main',
+      items: [],
+      todos: [],
+      tasks: [{
+        taskId: 'task-1',
+        kind: 'subagent',
+        state: 'running',
+        detached: true,
+        agentId: 'agent-2',
+        description: '检查测试',
+        outputTail: '已完成第一步',
+        stateReason: 'waiting for completion notification',
+        startedAt: '2026-07-30T08:00:00.000Z',
+      }, {
+        taskId: 'task-legacy',
+        kind: 'other',
+        state: 'running',
+        description: '旧任务',
+        outputTail: '',
+      }],
+      meta: {},
+    }, { items: [] }, { items: [] });
+
+    expect(projected.tasks[0]).toMatchObject({
+      id: 'task-1',
+      detached: true,
+      agentId: 'agent-2',
+      activityHint: 'waiting_notification',
+      updatedAt: '2026-07-30T08:00:00.000Z',
+    });
+    expect(projected.tasks[1]).toMatchObject({ id: 'task-legacy', state: 'running' });
+    expect(projected.tasks[1].activityHint).toBeUndefined();
+  });
+
   it('rejects malformed transcript roots instead of inventing task data', () => {
     expect(() => projectTranscript({ items: [] }, { items: [] }, { items: [] })).toThrow('本地服务返回了不支持的任务记录');
   });

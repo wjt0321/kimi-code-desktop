@@ -67,6 +67,8 @@ describe('ContextDock', () => {
           ],
           tasks: [
             { id: 'running', title: '运行任务', kind: 'subagent', state: 'running', outputTail: '' },
+            { id: 'progress', title: '进展任务', kind: 'subagent', state: 'running', outputTail: '50%', activityHint: 'snapshot' },
+            { id: 'waiting', title: '通知任务', kind: 'subagent', state: 'running', outputTail: '等待', activityHint: 'waiting_notification' },
             { id: 'completed', title: '完成任务', kind: 'shell', state: 'completed', outputTail: '' },
             { id: 'failed', title: '失败任务', kind: 'tool', state: 'failed', outputTail: '' },
             { id: 'timed', title: '超时任务', kind: 'other', state: 'timed_out', outputTail: '' },
@@ -85,11 +87,13 @@ describe('ContextDock', () => {
 
     expect(screen.getByRole('heading', { name: '待办 2 / 3' })).not.toBeNull();
     expect(screen.getByText('运行中')).not.toBeNull();
+    expect(screen.getByText('已有进展')).not.toBeNull();
+    expect(screen.getByText('等待完成通知')).not.toBeNull();
     expect(screen.getByText('已完成')).not.toBeNull();
     expect(screen.getByText('失败')).not.toBeNull();
     expect(screen.getByText('已超时')).not.toBeNull();
-    expect(screen.getByText('已终止')).not.toBeNull();
-    expect(screen.getByText('已失联')).not.toBeNull();
+    expect(screen.getByText('已取消')).not.toBeNull();
+    expect(screen.getByText('状态未知')).not.toBeNull();
     expect(screen.queryByText('timed_out')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: /运行任务/ }));

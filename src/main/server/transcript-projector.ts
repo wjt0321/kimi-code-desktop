@@ -117,15 +117,29 @@ function readTasks(value: unknown): DesktopTask[] {
     const state = record?.state;
     if (!id || (kind !== 'shell' && kind !== 'subagent' && kind !== 'tool' && kind !== 'other')) continue;
     if (state !== 'running' && state !== 'completed' && state !== 'failed' && state !== 'timed_out' && state !== 'killed' && state !== 'lost') continue;
+    const stateReason = readString(record.stateReason);
+    const outputTail = readString(record.outputTail) ?? '';
+    const startedAt = readString(record.startedAt);
+    const endedAt = readString(record.endedAt);
     tasks.push({
       id,
       title: readString(record.description) ?? '后台任务',
       kind,
       state,
-      outputTail: readString(record.outputTail) ?? '',
+      outputTail,
+      detached: readBoolean(record.detached),
+      agentId: readString(record.agentId),
+      resultSummary: readString(record.resultSummary),
       error: readString(record.error),
-      startedAt: readString(record.startedAt),
-      endedAt: readString(record.endedAt),
+      stateReason,
+      activityHint: state === 'running' && /notification|通知/i.test(stateReason ?? '')
+        ? 'waiting_notification'
+        : state === 'running' && outputTail.trim().length > 0
+          ? 'snapshot'
+          : undefined,
+      startedAt,
+      endedAt,
+      updatedAt: endedAt ?? startedAt,
     });
   }
   return tasks;
